@@ -52,7 +52,7 @@ function AdminPanel({tab,setTab}){
       setLoading(true);
       try{
         const [u,p,d,w,s]=await Promise.all([
-          supabase.from('profiles').select('id,email,username,display_name,role,active_plan,created_at').order('created_at',{ascending:false}),
+          supabase.from('profiles').select('id,email,username,display_name,role,active_plan,active_plan_since,created_at').order('created_at',{ascending:false}),
           supabase.from('packages').select('*').order('price',{ascending:true}),
           supabase.from('deposit_requests').select('*').order('created_at',{ascending:false}).limit(100),
           supabase.from('withdrawal_requests').select('*').order('created_at',{ascending:false}).limit(100),
@@ -83,8 +83,9 @@ function AdminPanel({tab,setTab}){
         setDeps(deps.map(x=>x.id===row.id?{...x,status:'reviewed'}:x));
         const pack=packs.find(p=>Number(p.price)===Number(row.amount));
         if(pack&&row.user_id){
-          const {error:e2}=await supabase.from('profiles').update({active_plan:pack.name}).eq('id',row.user_id);
-          if(!e2)setUsers(users.map(u=>u.id===row.user_id?{...u,active_plan:pack.name}:u));
+          const stamp=new Date().toISOString();
+          const {error:e2}=await supabase.from('profiles').update({active_plan:pack.name,active_plan_since:stamp}).eq('id',row.user_id);
+          if(!e2)setUsers(users.map(u=>u.id===row.user_id?{...u,active_plan:pack.name,active_plan_since:stamp}:u));
         }
       }
       else setWds(wds.map(x=>x.id===row.id?{...x,status:'reviewed'}:x));
@@ -92,9 +93,10 @@ function AdminPanel({tab,setTab}){
   }
   async function setPlan(u,planName){
     try{
-      const {error}=await supabase.from('profiles').update({active_plan:planName||null}).eq('id',u.id);
+      const patch=planName?{active_plan:planName,active_plan_since:new Date().toISOString()}:{active_plan:null,active_plan_since:null};
+      const {error}=await supabase.from('profiles').update(patch).eq('id',u.id);
       if(error)throw error;
-      setUsers(users.map(x=>x.email===u.email?{...x,active_plan:planName||null}:x));
+      setUsers(users.map(x=>x.email===u.email?{...x,...patch}:x));
     }catch(err){setAmsg(err.message||'Could not update plan. (Run the admin-update SQL first.)')}
   }
   async function toggleMaintenance(){
@@ -303,19 +305,25 @@ function PackageManager({packs,setPacks}){
   </div>;
 }
 
-function AIMachinePlan({plan}){
+function AIMachinePlan({plan,since}){
   const CYCLE=86400000, R=88, CIRC=2*Math.PI*R;
+  const dur=Number(plan.dur)||120;
   const [now,setNow]=useState(()=>Date.now());
   const [t0,setT0]=useState(()=>{try{const s=JSON.parse(localStorage.getItem('cm_cycle')||'null');if(s&&s.plan===plan.name&&s.t0)return s.t0;}catch{}return 0;});
   useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),1000);return ()=>clearInterval(t);},[]);
   const elapsed=t0?now-t0:0, done=t0&&elapsed>=CYCLE, prog=t0?Math.min(1,elapsed/CYCLE):0;
   const rem=Math.max(0,CYCLE-elapsed);
   const hh=String(Math.floor(rem/3600000)).padStart(2,'0'),mm=String(Math.floor(rem%3600000/60000)).padStart(2,'0'),ss=String(Math.floor(rem%60000/1000)).padStart(2,'0');
+  const sinceMs=since?new Date(since).getTime():0;
+  const dayN=sinceMs?Math.max(1,Math.floor((now-sinceMs)/86400000)+1):0;
+  const dayProg=sinceMs?Math.min(1,Math.max(0,(now-sinceMs)/(dur*86400000))):0;
+  const termDone=dayN>dur;
   const start=()=>{const t=Date.now();setT0(t);setNow(t);try{localStorage.setItem('cm_cycle',JSON.stringify({plan:plan.name,t0:t}));}catch{}};
   return <div className="aimachine">
-    <div className="aimachine-glow"/>
+    <div className="aimachine-glow"/><div className="aimachine-shine"/>
     <div className="aimachine-head"><small>ACTIVE PLAN</small><h2>{plan.name} Plan</h2><span className="badge approved">active</span></div>
     <div className="aimachine-core">
+      <div className="aimachine-beam"/>
       <svg className="aimachine-ring" viewBox="0 0 200 200">
         <defs><linearGradient id="aigrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#53f6c8"/><stop offset="1" stopColor="#22d3ee"/></linearGradient></defs>
         <circle cx="100" cy="100" r={R} className="aimachine-track"/>
@@ -327,6 +335,10 @@ function AIMachinePlan({plan}){
     </div>
     <div className="aimachine-count">{done?'00:00:00':hh+':'+mm+':'+ss}</div>
     <small className="aimachine-cycle-label">{!t0?'24-HOUR CYCLE':done?'CYCLE COMPLETE':'CYCLE RUNNING'}</small>
+    {sinceMs>0&&<div className="aimachine-term">
+      <div className="aimachine-daylabel">{termDone?'PLAN PERIOD COMPLETE':'DAY '+dayN+' OF '+dur}</div>
+      <div className="aimachine-daybar"><div className="aimachine-dayfill" style={{width:(dayProg*100).toFixed(2)+'%'}}/></div>
+    </div>}
     <div className="aimachine-meta">
       <div><small>Price</small><b>${plan.price}</b></div>
       <div><small>Daily (illustrative)</small><b>{isNaN(Number(plan.price))?'—':(Number(plan.price)/120).toFixed(2)+'%'}</b></div>
@@ -574,7 +586,7 @@ function App(){
     </div>;
     if(activeTab==='My Plans')return <div className="tabwrap">
       <div className="sectiontitle"><h2>My Plans</h2></div>
-      {profile?.active_plan?<AIMachinePlan plan={livePlans.find(p=>p.name===profile.active_plan)||{name:profile.active_plan,price:'—',rate:'—',dur:120,tone:'cyan',icon:'◆'}}/>
+      {profile?.active_plan?<AIMachinePlan plan={livePlans.find(p=>p.name===profile.active_plan)||{name:profile.active_plan,price:'—',rate:'—',dur:120,tone:'cyan',icon:'◆'}} since={profile?.active_plan_since}/>
       :<div className="placeholder" style={{marginTop:0}}><div className="bigicon"><Package size={36}/></div><h2>No active plans</h2><p>You don't have any active plans yet. Plans are activated manually after your deposit request is reviewed.</p><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View packages</Button></div>}
     </div>;
     if(activeTab==='Mining cycles')return <div className="tabwrap">

@@ -164,3 +164,13 @@ footer{padding:22px 6.5%}
 @keyframes aimspin{to{transform:rotate(360deg)}}
 @keyframes aimpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
 @keyframes aimfloat{0%,100%{transform:translateY(0);opacity:.9}50%{transform:translateY(-12px);opacity:.4}}
+
+/* AI machine extra: day tracker + beams */
+.aimachine-shine{position:absolute;top:0;bottom:0;width:70px;background:linear-gradient(105deg,transparent,rgba(255,255,255,.13),transparent);transform:skewX(-18deg);animation:aimshine 4.5s ease-in-out infinite;pointer-events:none;z-index:3}
+.aimachine-beam{position:absolute;inset:-20px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0deg,rgba(83,246,200,.30) 45deg,transparent 90deg);animation:aimspin 5s linear infinite;pointer-events:none}
+.aimachine-term{position:relative;margin:16px 4px 2px;z-index:2}
+.aimachine-daylabel{font-size:13px;font-weight:800;letter-spacing:3px;color:#eaf4ff;text-shadow:0 0 16px rgba(83,246,200,.6);animation:aimdayglow 3s ease-in-out infinite}
+.aimachine-daybar{height:9px;border-radius:99px;background:#0d1f34;border:1px solid #1c3a5e;overflow:hidden;margin-top:9px}
+.aimachine-dayfill{height:100%;border-radius:99px;background:linear-gradient(90deg,#53f6c8,#22d3ee);box-shadow:0 0 14px rgba(34,211,238,.75);transition:width 1s linear}
+@keyframes aimdayglow{0%,100%{opacity:1}50%{opacity:.6}}
+@keyframes aimshine{0%{left:-90px}55%,100%{left:112%}}
