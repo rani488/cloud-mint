@@ -87,8 +87,8 @@ function AdminPanel({tab,setTab}){
   }
   return <div className="dashsection">
     <div className="sectiontitle"><h2>Admin Panel</h2><span>restricted access</span></div>
-    {loading?<p className="muted">Loading records…</p>:tab==='users'?<div className="infoCard" style={{display:'block',padding:0,overflow:'hidden'}}>
-      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+    {loading?<p className="muted">Loading records…</p>:tab==='users'?<div className="infoCard" style={{display:'block',padding:0,overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
+      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:600}}>
         <thead><tr style={{textAlign:'left',color:'#9db5d0'}}>
           <th style={{padding:'12px 14px'}}>Email</th><th style={{padding:'12px 14px'}}>Username</th><th style={{padding:'12px 14px'}}>Name</th><th style={{padding:'12px 14px'}}>Role</th><th style={{padding:'12px 14px'}}>Joined</th>
         </tr></thead>
