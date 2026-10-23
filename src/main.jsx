@@ -52,7 +52,7 @@ function AdminPanel({tab,setTab}){
       setLoading(true);
       try{
         const [u,p,d,w,s]=await Promise.all([
-          supabase.from('profiles').select('email,username,display_name,role,created_at').order('created_at',{ascending:false}),
+          supabase.from('profiles').select('id,email,username,display_name,role,active_plan,created_at').order('created_at',{ascending:false}),
           supabase.from('packages').select('*').order('price',{ascending:true}),
           supabase.from('deposit_requests').select('*').order('created_at',{ascending:false}).limit(100),
           supabase.from('withdrawal_requests').select('*').order('created_at',{ascending:false}).limit(100),
@@ -75,13 +75,27 @@ function AdminPanel({tab,setTab}){
       setAmsg('Deposit addresses saved and live on the Deposit page.');
     }catch(err){setAmsg(err.message||'Could not save.')}finally{setSaving(false)}
   }
-  async function markReviewed(kind,id){
+  async function markReviewed(kind,row){
     try{
-      const {error}=await supabase.from(kind==='dep'?'deposit_requests':'withdrawal_requests').update({status:'reviewed'}).eq('id',id);
+      const {error}=await supabase.from(kind==='dep'?'deposit_requests':'withdrawal_requests').update({status:'reviewed'}).eq('id',row.id);
       if(error)throw error;
-      if(kind==='dep')setDeps(deps.map(x=>x.id===id?{...x,status:'reviewed'}:x));
-      else setWds(wds.map(x=>x.id===id?{...x,status:'reviewed'}:x));
+      if(kind==='dep'){
+        setDeps(deps.map(x=>x.id===row.id?{...x,status:'reviewed'}:x));
+        const pack=packs.find(p=>Number(p.price)===Number(row.amount));
+        if(pack&&row.user_id){
+          const {error:e2}=await supabase.from('profiles').update({active_plan:pack.name}).eq('id',row.user_id);
+          if(!e2)setUsers(users.map(u=>u.id===row.user_id?{...u,active_plan:pack.name}:u));
+        }
+      }
+      else setWds(wds.map(x=>x.id===row.id?{...x,status:'reviewed'}:x));
     }catch(err){setAmsg(err.message||'Could not update. (Run the admin-update SQL first.)')}
+  }
+  async function setPlan(u,planName){
+    try{
+      const {error}=await supabase.from('profiles').update({active_plan:planName||null}).eq('id',u.id);
+      if(error)throw error;
+      setUsers(users.map(x=>x.email===u.email?{...x,active_plan:planName||null}:x));
+    }catch(err){setAmsg(err.message||'Could not update plan. (Run the admin-update SQL first.)')}
   }
   async function toggleMaintenance(){
     const next=addrs.maintenance_mode==='on'?'off':'on';
@@ -96,15 +110,19 @@ function AdminPanel({tab,setTab}){
   return <div className="dashsection">
     <div className="sectiontitle"><h2>Admin Panel</h2><span>restricted access</span></div>
     {loading?<p className="muted">Loading records…</p>:tab==='users'?<div className="infoCard" style={{display:'block',padding:0,overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
-      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:600}}>
+      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:760}}>
         <thead><tr style={{textAlign:'left',color:'#9db5d0'}}>
-          <th style={{padding:'12px 14px'}}>Email</th><th style={{padding:'12px 14px'}}>Username</th><th style={{padding:'12px 14px'}}>Name</th><th style={{padding:'12px 14px'}}>Role</th><th style={{padding:'12px 14px'}}>Joined</th>
+          <th style={{padding:'12px 14px'}}>Email</th><th style={{padding:'12px 14px'}}>Username</th><th style={{padding:'12px 14px'}}>Name</th><th style={{padding:'12px 14px'}}>Role</th><th style={{padding:'12px 14px'}}>Plan</th><th style={{padding:'12px 14px'}}>Joined</th>
         </tr></thead>
         <tbody>{users.map(u=><tr key={u.email} style={{borderTop:'1px solid #12395c'}}>
           <td style={{padding:'11px 14px'}}>{u.email}</td><td style={{padding:'11px 14px'}}>{u.username||'—'}</td><td style={{padding:'11px 14px'}}>{u.display_name||'—'}</td>
           <td style={{padding:'11px 14px'}}><span className="tag" style={u.role==='admin'?{background:'#06443c',color:'#53f6c8'}:{}}>{u.role||'user'}</span></td>
+          <td style={{padding:'11px 14px'}}><select value={u.active_plan||''} onChange={e=>setPlan(u,e.target.value)} style={{background:'#0b1e33',color:'#dbe7f5',border:'1px solid #1c3a5e',borderRadius:8,padding:'6px 8px',fontSize:12,maxWidth:130}}>
+            <option value="">—</option>
+            {packs.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+          </select></td>
           <td style={{padding:'11px 14px',color:'#9db5d0'}}>{u.created_at?new Date(u.created_at).toLocaleDateString():'—'}</td>
-        </tr>)}{users.length===0&&<tr><td colSpan="5" style={{padding:'16px',color:'#9db5d0'}}>No users found.</td></tr>}</tbody>
+        </tr>)}{users.length===0&&<tr><td colSpan="6" style={{padding:'16px',color:'#9db5d0'}}>No users found.</td></tr>}</tbody>
       </table>
     </div>:tab==='packages'?<PackageManager packs={packs} setPacks={setPacks}/>
     :tab==='deposits'?<div className="infoCard" style={{display:'block',padding:0,overflowX:'auto'}}>
@@ -115,7 +133,7 @@ function AdminPanel({tab,setTab}){
         <tbody>{deps.map(d=><tr key={d.id} style={{borderTop:'1px solid #12395c'}}>
           <td style={{padding:'11px 14px'}}>{d.email||'—'}</td><td style={{padding:'11px 14px'}}>{d.chain}</td><td style={{padding:'11px 14px'}}>${d.amount}</td>
           <td style={{padding:'11px 14px',fontFamily:'monospace',fontSize:11}} title={d.tx_hash}>{String(d.tx_hash).slice(0,10)}…{String(d.tx_hash).slice(-6)}</td>
-          <td style={{padding:'11px 14px'}}><span className={'badge '+(d.status||'pending')}>{d.status||'pending'}</span>{(d.status||'pending')!=='reviewed'&&<button style={{marginLeft:8,background:'transparent',border:'1px solid #2b5a8f',color:'#9cc8ff',borderRadius:99,padding:'3px 10px',fontSize:10,fontWeight:700,cursor:'pointer'}} onClick={()=>markReviewed('dep',d.id)}>Mark reviewed</button>}</td>
+          <td style={{padding:'11px 14px'}}><span className={'badge '+(d.status||'pending')}>{d.status||'pending'}</span>{(d.status||'pending')!=='reviewed'&&<button style={{marginLeft:8,background:'transparent',border:'1px solid #2b5a8f',color:'#9cc8ff',borderRadius:99,padding:'3px 10px',fontSize:10,fontWeight:700,cursor:'pointer'}} onClick={()=>markReviewed('dep',d)}>Mark reviewed</button>}</td>
           <td style={{padding:'11px 14px',color:'#9db5d0'}}>{d.created_at?new Date(d.created_at).toLocaleString():'—'}</td>
         </tr>)}{deps.length===0&&<tr><td colSpan="6" style={{padding:'16px',color:'#9db5d0'}}>No deposit requests.</td></tr>}</tbody>
       </table>
@@ -128,7 +146,7 @@ function AdminPanel({tab,setTab}){
         <tbody>{wds.map(w=><tr key={w.id} style={{borderTop:'1px solid #12395c'}}>
           <td style={{padding:'11px 14px'}}>{w.email||'—'}</td><td style={{padding:'11px 14px'}}>{w.chain}</td><td style={{padding:'11px 14px'}}>${w.amount}</td>
           <td style={{padding:'11px 14px',fontFamily:'monospace',fontSize:11}} title={w.wallet_address}>{String(w.wallet_address).slice(0,10)}…{String(w.wallet_address).slice(-6)}</td>
-          <td style={{padding:'11px 14px'}}><span className={'badge '+(w.status||'pending')}>{w.status||'pending'}</span>{(w.status||'pending')!=='reviewed'&&<button style={{marginLeft:8,background:'transparent',border:'1px solid #2b5a8f',color:'#9cc8ff',borderRadius:99,padding:'3px 10px',fontSize:10,fontWeight:700,cursor:'pointer'}} onClick={()=>markReviewed('wd',w.id)}>Mark reviewed</button>}</td>
+          <td style={{padding:'11px 14px'}}><span className={'badge '+(w.status||'pending')}>{w.status||'pending'}</span>{(w.status||'pending')!=='reviewed'&&<button style={{marginLeft:8,background:'transparent',border:'1px solid #2b5a8f',color:'#9cc8ff',borderRadius:99,padding:'3px 10px',fontSize:10,fontWeight:700,cursor:'pointer'}} onClick={()=>markReviewed('wd',w)}>Mark reviewed</button>}</td>
           <td style={{padding:'11px 14px',color:'#9db5d0'}}>{w.created_at?new Date(w.created_at).toLocaleString():'—'}</td>
         </tr>)}{wds.length===0&&<tr><td colSpan="6" style={{padding:'16px',color:'#9db5d0'}}>No withdrawal requests.</td></tr>}</tbody>
       </table>
@@ -497,7 +515,8 @@ function App(){
     </div>;
     if(activeTab==='My Plans')return <div className="tabwrap">
       <div className="sectiontitle"><h2>My Plans</h2></div>
-      <div className="placeholder" style={{marginTop:0}}><div className="bigicon"><Package size={36}/></div><h2>No active plans</h2><p>You don't have any active plans yet. Plans are activated manually after your deposit request is reviewed.</p><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View packages</Button></div>
+      {profile?.active_plan?<div className="infoCard"><Package/><div><b>Plan on record: {profile.active_plan}</b><p>Recorded by the admin after manual review of your deposit. This site does not credit earnings automatically — mining displays are visual simulations only.</p></div></div>
+      :<div className="placeholder" style={{marginTop:0}}><div className="bigicon"><Package size={36}/></div><h2>No active plans</h2><p>You don't have any active plans yet. Plans are activated manually after your deposit request is reviewed.</p><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View packages</Button></div>}
     </div>;
     if(activeTab==='Mining cycles')return <div className="tabwrap">
       <div className="sectiontitle"><h2>Mining cycles</h2><span>visual simulation</span></div>
