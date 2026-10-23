@@ -109,6 +109,7 @@ function AdminPanel({tab,setTab}){
   }
   return <div className="dashsection">
     <div className="sectiontitle"><h2>Admin Panel</h2><span>restricted access</span></div>
+    {amsg&&<p className="muted" style={{margin:'0 0 12px'}}>{amsg}</p>}
     {loading?<p className="muted">Loading records…</p>:tab==='users'?<div className="infoCard" style={{display:'block',padding:0,overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
       <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:760}}>
         <thead><tr style={{textAlign:'left',color:'#9db5d0'}}>
@@ -416,6 +417,22 @@ function App(){
   },[session]);
   useEffect(()=>{ if(isAdminPath) setEmail('miamiqueens11@gmail.com'); },[]);
   useEffect(()=>{ if(!toast)return; const t=setTimeout(()=>setToast(''),3200); return ()=>clearTimeout(t); },[toast]);
+  const refreshUserData=async()=>{
+    if(!supabase||!session?.user)return;
+    try{
+      const uid=session.user.id;
+      const [pr,d,w,pk]=await Promise.all([
+        supabase.from('profiles').select('*').eq('id',uid).single(),
+        supabase.from('deposit_requests').select('*').eq('user_id',uid).order('created_at',{ascending:false}),
+        supabase.from('withdrawal_requests').select('*').eq('user_id',uid).order('created_at',{ascending:false}),
+        supabase.from('packages').select('*').eq('is_active',true).order('price')
+      ]);
+      if(pr.data){setProfile(pr.data);setEditName(pr.data.display_name||'')}
+      setDeposits(d.data||[]);setWithdrawals(w.data||[]);
+      if(pk.data&&pk.data.length)setDbPacks(pk.data);
+    }catch{/* keep defaults */}
+  };
+  useEffect(()=>{ if(session?.user&&['Overview','Deposit instructions','Withdraw','Packages','My Plans','Transactions','Profile'].includes(activeTab))refreshUserData(); },[activeTab]);
   useEffect(()=>{
     let cancelled=false;
     (async()=>{
