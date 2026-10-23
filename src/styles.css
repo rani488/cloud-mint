@@ -102,3 +102,9 @@
 @keyframes brandshine{to{background-position:220% center}}
 .brandmark{animation:markpulse 3s ease-in-out infinite}
 @keyframes markpulse{0%,100%{filter:drop-shadow(0 0 8px #00bffb)}50%{filter:drop-shadow(0 0 18px #a33dff)}}
+
+.mrow{display:grid;gap:10px;border:1px solid #12395c;border-radius:12px;background:#06182a;padding:13px 15px}
+.mrow input[type=text],.mrow input:not([type]),.mrow select{background:#020c19;border:1px solid #1a4165;color:#fff;border-radius:8px;padding:9px 10px;font-size:12px;outline:0}
+.mrow input:focus,.mrow select:focus{border-color:#05bce9}
+.mrow .btn{padding:8px 12px;font-size:11px}
+.stackform select{width:100%;border:1px solid #1a4165;border-radius:10px;padding:13px;background:#020c19;color:#fff;font-size:13px;outline:0}

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createClient } from '@supabase/supabase-js';
-import { Cloud, ShieldCheck, Wallet, Users, Zap, Gift, CalendarDays, ChartNoAxesCombined, Menu, X, ArrowRight, Mail, LockKeyhole, UserRound, CircleHelp, LogOut, Settings, Package, LayoutDashboard, Activity, Copy, Eye, EyeOff, CheckCircle2, AlertTriangle, KeyRound, MessageCircle, Send } from 'lucide-react';
+import { Cloud, ShieldCheck, Wallet, Users, Zap, Gift, CalendarDays, ChartNoAxesCombined, Menu, X, ArrowRight, Mail, LockKeyhole, UserRound, CircleHelp, LogOut, Settings, Package, LayoutDashboard, Activity, Copy, Eye, EyeOff, CheckCircle2, AlertTriangle, KeyRound, MessageCircle, Send, Link, Globe, Star, Bell } from 'lucide-react';
 import './styles.css';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -16,6 +16,23 @@ const plans = [
   {name:'VIP',price:1000,rate:'4.00%',tone:'purple',icon:'✧'}
 ];
 const rewardRows = [{members:10,reward:3},{members:20,reward:5},{members:50,reward:10},{members:100,reward:20},{members:500,reward:50}];
+const ICONS={LayoutDashboard,Wallet,Package,Zap,Activity,Gift,Users,ChartNoAxesCombined,UserRound,CircleHelp,Settings,Link,Globe,MessageCircle,Send,Star,Bell,ShieldCheck};
+const ICON_NAMES=Object.keys(ICONS);
+const DEFAULT_MENU=[
+ {label:'Overview',tab_key:'Overview',icon:'LayoutDashboard'},
+ {label:'Deposit instructions',tab_key:'Deposit instructions',icon:'Wallet'},
+ {label:'Packages',tab_key:'Packages',icon:'Package'},
+ {label:'My Plans',tab_key:'My Plans',icon:'Package'},
+ {label:'Mining cycles',tab_key:'Mining cycles',icon:'Zap'},
+ {label:'Reinvest',tab_key:'Reinvest',icon:'Activity'},
+ {label:'Rewards',tab_key:'Rewards',icon:'Gift'},
+ {label:'Team',tab_key:'Team',icon:'Users'},
+ {label:'Transactions',tab_key:'Transactions',icon:'ChartNoAxesCombined'},
+ {label:'Withdraw',tab_key:'Withdraw',icon:'Wallet'},
+ {label:'Profile',tab_key:'Profile',icon:'UserRound'},
+ {label:'Support',tab_key:'Support',icon:'CircleHelp'}
+];
+const SECTION_KEYS=DEFAULT_MENU.map(m=>m.tab_key);
 
 function Brand(){return <div className="brand"><div className="brandmark"><Cloud size={29}/><span>₿</span></div><div><b>CloudMint</b><small>Mine · Grow · Earn</small></div></div>}
 function Button({children,kind='primary',...props}){return <button className={`btn ${kind}`} {...props}>{children}</button>}
@@ -67,6 +84,7 @@ function AdminPanel(){
       <Button kind={tab==='deposits'?'primary':'outline'} onClick={()=>setTab('deposits')}>Deposits</Button>
       <Button kind={tab==='withdrawals'?'primary':'outline'} onClick={()=>setTab('withdrawals')}>Withdrawals</Button>
       <Button kind={tab==='settings'?'primary':'outline'} onClick={()=>setTab('settings')}>Settings</Button>
+      <Button kind={tab==='menu'?'primary':'outline'} onClick={()=>setTab('menu')}>Menu</Button>
     </div>
     {loading?<p className="muted">Loading records…</p>:tab==='users'?<div className="infoCard" style={{display:'block',padding:0,overflow:'hidden'}}>
       <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
@@ -110,6 +128,7 @@ function AdminPanel(){
         </tr>)}{wds.length===0&&<tr><td colSpan="6" style={{padding:'16px',color:'#9db5d0'}}>No withdrawal requests.</td></tr>}</tbody>
       </table>
     </div>
+    :tab==='menu'?<MenuManager/>
     :<form onSubmit={saveAddrs} className="stackform" style={{maxWidth:560}}>
       <div><label>Tron deposit address (USDT · TRC20)</label><input value={addrs.deposit_tron} onChange={e=>setAddrs({...addrs,deposit_tron:e.target.value})} placeholder="T…"/></div>
       <div><label>BNB deposit address (USDT · BEP20)</label><input value={addrs.deposit_bnb} onChange={e=>setAddrs({...addrs,deposit_bnb:e.target.value})} placeholder="0x…"/></div>
@@ -118,6 +137,72 @@ function AdminPanel(){
       <p className="tiny">These addresses appear on the user Deposit page. Leave a field blank to hide that chain.</p>
     </form>}
     <div className="infoCard" style={{marginTop:18}}><ShieldCheck/><div><b>Read-only preview</b><p>The admin view lists account records only. It does not move money, edit rates, approve payouts, or promise returns.</p></div></div>
+  </div>;
+}
+
+function MenuManager(){
+  const [items,setItems]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [nLabel,setNLabel]=useState('');
+  const [nIcon,setNIcon]=useState('Star');
+  const [nType,setNType]=useState('section');
+  const [nSection,setNSection]=useState('Support');
+  const [nUrl,setNUrl]=useState('');
+  const [msg,setMsg]=useState('');
+  const load=async()=>{setLoading(true);try{const {data}=await supabase.from('menu_items').select('*').order('position');setItems(data||[])}catch{}setLoading(false)};
+  useEffect(()=>{load()},[]);
+  const save=async(id,patch)=>{const {error}=await supabase.from('menu_items').update(patch).eq('id',id);if(error)setMsg(error.message);else setItems(items.map(i=>i.id===id?{...i,...patch}:i))};
+  const del=async(id)=>{if(!window.confirm('Delete this menu item?'))return;const {error}=await supabase.from('menu_items').delete().eq('id',id);if(error)setMsg(error.message);else setItems(items.filter(i=>i.id!==id))};
+  const move=async(item,dir)=>{
+    const sorted=[...items].sort((a,b)=>a.position-b.position);
+    const ix=sorted.findIndex(i=>i.id===item.id),jx=ix+dir;
+    if(ix<0||jx<0||jx>=sorted.length)return;
+    const a=sorted[ix],b=sorted[jx];
+    await supabase.from('menu_items').update({position:b.position}).eq('id',a.id);
+    await supabase.from('menu_items').update({position:a.position}).eq('id',b.id);
+    load();
+  };
+  const add=async(e)=>{
+    e.preventDefault();setMsg('');
+    if(!nLabel.trim()){setMsg('Enter a label.');return}
+    const tab_key=nType==='url'?'url:'+nUrl.trim():nSection;
+    if(nType==='url'&&!/^https?:\/\//i.test(nUrl.trim())){setMsg('URL must start with http:// or https://');return}
+    const position=items.length?Math.max(...items.map(i=>i.position))+1:1;
+    const {error}=await supabase.from('menu_items').insert({label:nLabel.trim(),tab_key,icon:nIcon,position});
+    if(error)setMsg(error.message);else{setNLabel('');setNUrl('');setMsg('Menu item added — users see it after reload.');load()}
+  };
+  return <div>
+    {loading?<p className="muted">Loading menu…</p>:<div className="txlist">{items.map(m=><div className="mrow" key={m.id}>
+      <div style={{display:'flex',gap:8,alignItems:'center'}}>
+        <input defaultValue={m.label} onBlur={e=>{if(e.target.value!==m.label)save(m.id,{label:e.target.value})}} placeholder="Label" style={{flex:1,minWidth:0}}/>
+        <label className="tiny" style={{display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap'}}><input type="checkbox" checked={m.is_visible} onChange={e=>save(m.id,{is_visible:e.target.checked})}/> Show</label>
+      </div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+        <select value={m.icon} onChange={e=>save(m.id,{icon:e.target.value})}>{ICON_NAMES.map(n=><option key={n} value={n}>{n}</option>)}</select>
+        {m.tab_key.indexOf('url:')===0
+          ?<input defaultValue={m.tab_key.slice(4)} onBlur={e=>{const v='url:'+e.target.value.trim();if(v!==m.tab_key)save(m.id,{tab_key:v})}} placeholder="https://…" style={{flex:1,minWidth:150}}/>
+          :<select value={SECTION_KEYS.includes(m.tab_key)?m.tab_key:SECTION_KEYS[0]} onChange={e=>save(m.id,{tab_key:e.target.value})}>{SECTION_KEYS.map(s=><option key={s} value={s}>{s}</option>)}</select>}
+        <span style={{display:'flex',gap:5}}>
+          <Button kind="outline" onClick={()=>move(m,-1)}>↑</Button>
+          <Button kind="outline" onClick={()=>move(m,1)}>↓</Button>
+          <Button kind="outline" onClick={()=>del(m.id)}>✕</Button>
+        </span>
+      </div>
+    </div>)}{items.length===0&&<p className="muted">No menu items — add one below.</p>}</div>}
+    <div className="sectiontitle" style={{marginTop:22}}><h2>Add menu item</h2></div>
+    <form onSubmit={add} className="stackform">
+      <div><label>Label</label><input value={nLabel} onChange={e=>setNLabel(e.target.value)} placeholder="e.g. Announcements"/></div>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+        <div style={{flex:1,minWidth:140}}><label>Icon</label><select value={nIcon} onChange={e=>setNIcon(e.target.value)} style={{width:'100%'}}>{ICON_NAMES.map(n=><option key={n} value={n}>{n}</option>)}</select></div>
+        <div style={{flex:1,minWidth:140}}><label>Type</label><select value={nType} onChange={e=>setNType(e.target.value)} style={{width:'100%'}}><option value="section">App section</option><option value="url">Custom link</option></select></div>
+      </div>
+      {nType==='section'
+        ?<div><label>Section</label><select value={nSection} onChange={e=>setNSection(e.target.value)} style={{width:'100%'}}>{SECTION_KEYS.map(s=><option key={s} value={s}>{s}</option>)}</select></div>
+        :<div><label>URL</label><input value={nUrl} onChange={e=>setNUrl(e.target.value)} placeholder="https://…"/></div>}
+      <Button>Add item</Button>
+      {msg&&<p className="muted">{msg}</p>}
+      <p className="tiny">New items appear in the user sidebar after they reload. Sections open inside the app; custom links open in a new tab.</p>
+    </form>
   </div>;
 }
 
@@ -151,6 +236,7 @@ function App(){
   const [deposits,setDeposits]=useState([]);
   const [withdrawals,setWithdrawals]=useState([]);
   const [siteAddrs,setSiteAddrs]=useState({TRON:'',BNB:'0x73173d35F5D5d6518EF8d32b65d85Ca7910D2376'});
+  const [menuItems,setMenuItems]=useState([]);
   const [depChain,setDepChain]=useState('TRON');
   const [depAmount,setDepAmount]=useState('');
   const [depTx,setDepTx]=useState('');
@@ -217,15 +303,17 @@ function App(){
       if(!supabase||!session?.user)return;
       try{
         const uid=session.user.id;
-        const [pr,d,w,s]=await Promise.all([
+        const [pr,d,w,s,mn]=await Promise.all([
           supabase.from('profiles').select('*').eq('id',uid).single(),
           supabase.from('deposit_requests').select('*').eq('user_id',uid).order('created_at',{ascending:false}),
           supabase.from('withdrawal_requests').select('*').eq('user_id',uid).order('created_at',{ascending:false}),
-          supabase.from('site_settings').select('*')
+          supabase.from('site_settings').select('*'),
+          supabase.from('menu_items').select('*').eq('is_visible',true).order('position')
         ]);
         if(cancelled)return;
         if(pr.data){setProfile(pr.data);setEditName(pr.data.display_name||'')}
         setDeposits(d.data||[]);setWithdrawals(w.data||[]);
+        if(mn.data&&mn.data.length)setMenuItems(mn.data);
         const m={TRON:'',BNB:''};(s.data||[]).forEach(r=>{if(r.key==='deposit_tron')m.TRON=r.value||'';if(r.key==='deposit_bnb')m.BNB=r.value||''});setSiteAddrs(m);
       }catch{/* keep defaults */}
     })();
@@ -491,10 +579,13 @@ function App(){
     }catch(err){setNotice(err.message||'Could not update password.')}finally{setBusy(false)}
   }
   function SideNav({onNavigate,open,onClose}){
-    const tabs=['Overview','Deposit instructions','Packages','My Plans','Mining cycles','Reinvest','Rewards','Team','Transactions','Withdraw','Profile','Support'];
-    const icons=[<LayoutDashboard/>,<Wallet/>,<Package/>,<Package/>,<Zap/>,<Activity/>,<Gift/>,<Users/>,<ChartNoAxesCombined/>,<Wallet/>,<UserRound/>,<CircleHelp/>];
+    const menu=menuItems.length?menuItems:DEFAULT_MENU;
+    const go=(m)=>{
+      if(m.tab_key.indexOf('url:')===0){window.open(m.tab_key.slice(4),'_blank');return}
+      setActiveTab(m.tab_key);onNavigate('dashboard');
+    };
     return <aside className={'side'+(open?' open':'')}><Brand/><button className="drawerClose" onClick={onClose} aria-label="Close menu"><X/></button>
-      {tabs.map((x,i)=><button className={activeTab===x&&page==='dashboard'?'selected':''} onClick={()=>{setActiveTab(x);onNavigate('dashboard')}} key={x}>{icons[i]}{x}</button>)}
+      {menu.map(m=>{const I=ICONS[m.icon]||CircleHelp;return <button className={activeTab===m.tab_key&&page==='dashboard'?'selected':''} onClick={()=>go(m)} key={m.id||m.tab_key}><I/>{m.label}</button>})}
       <div className="salary"><CalendarDays/>Monthly Salary<small>Coming Soon</small></div>
       <button onClick={signOut}><LogOut/>Log out</button>
     </aside>;
