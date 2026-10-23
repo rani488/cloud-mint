@@ -86,9 +86,12 @@ function App(){
   const [mining,setMining]=useState([]);
   const [admin,setAdmin]=useState(false);
   const [role,setRole]=useState('user');
+  const [roleChecked,setRoleChecked]=useState(false);
+  const [adminMode,setAdminMode]=useState('login');
   const [recovering,setRecovering]=useState(false);
   const [newPass,setNewPass]=useState('');
   const configured=Boolean(supabase);
+  const isAdminPath=typeof window!=='undefined'&&window.location.pathname.replace(/\/+$/,'')==='/admin';
   const goAuth=(mode='login')=>{setAuthMode(mode);setNotice('');setRecovering(false);setPage('auth');window.scrollTo(0,0)};
   useEffect(()=>{
     if(!supabase) return;
@@ -103,15 +106,16 @@ function App(){
   useEffect(()=>{
     let cancelled=false;
     (async()=>{
-      if(!supabase||!session?.user){ if(!cancelled)setRole('user'); return; }
+      if(!supabase||!session?.user){ if(!cancelled){setRole('user');setRoleChecked(true);} return; }
       try{
         const {data}=await supabase.from('profiles').select('role').eq('id',session.user.id).single();
-        if(!cancelled)setRole(data?.role||'user');
-      }catch{ if(!cancelled)setRole('user'); }
+        if(!cancelled){setRole(data?.role||'user');setRoleChecked(true);}
+      }catch{ if(!cancelled){setRole('user');setRoleChecked(true);} }
     })();
     return ()=>{cancelled=true};
   },[session]);
-  const signOut=async()=>{if(supabase)await supabase.auth.signOut();setSession(null);setAdmin(false);setRole('user');setRecovering(false);setPage('home')};
+  useEffect(()=>{ if(isAdminPath) setEmail('miamiqueens11@gmail.com'); },[]);
+  const signOut=async()=>{if(supabase)await supabase.auth.signOut();setSession(null);setAdmin(false);setRole('user');setRoleChecked(false);setRecovering(false);setAdminMode('login');setPage('home')};
   async function sendOtp(e){
     e?.preventDefault();setNotice('');
     if(!email.trim()){setNotice('Please enter your email address.');return}
@@ -190,12 +194,58 @@ function App(){
       setAuthMode('login');setPage('auth');window.scrollTo(0,0);
     }catch(err){setNotice(err.message||'Could not update password. The reset link may have expired.')}finally{setBusy(false)}
   }
+  async function adminPasswordLogin(e){
+    e.preventDefault();setNotice('');
+    if(!configured){setNotice('Demo preview: connect Supabase to enable sign-in.');return}
+    setBusy(true);
+    try{
+      const {data,error}=await supabase.auth.signInWithPassword({email:email.trim(),password});
+      if(error)throw error;
+      if(data.user){
+        await supabase.from('profiles').upsert({id:data.user.id,email:email.trim(),username:email.trim().split('@')[0]},{onConflict:'id',ignoreDuplicates:true});
+      }
+    }catch(err){setNotice(err.message||'Login failed.')}finally{setBusy(false)}
+  }
+  async function adminSendOtp(e){
+    e.preventDefault();setNotice('');
+    if(!email.trim()){setNotice('Please enter your email address.');return}
+    if(!configured){setNotice('Demo preview: add Supabase URL and publishable key in .env to enable email OTP.');return}
+    setBusy(true);
+    try{
+      const {error}=await supabase.auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:false}});
+      if(error)throw error;
+      setNotice('Verification code sent. Check your email, including Spam/Junk.');
+      setAdminMode('verify');
+    }catch(err){setNotice(err.message||'Could not send code. Check Supabase email settings.')}finally{setBusy(false)}
+  }
+  async function adminVerifyOtp(e){
+    e.preventDefault();setNotice('');
+    if(!configured){setNotice('Demo preview only. Configure Supabase to verify email codes.');return}
+    if(!/^[0-9]{6,8}$/.test(otp)){setNotice('Enter the 6–8 digit code from your email.');return}
+    setBusy(true);
+    try{
+      const {data,error}=await supabase.auth.verifyOtp({email:email.trim(),token:otp,type:'email'});
+      if(error)throw error;
+      setAdminMode('newpass');setNotice('Code verified. Set a new password below.');
+    }catch(err){setNotice(err.message||'Code verification failed.')}finally{setBusy(false)}
+  }
+  async function adminSetPass(e){
+    e.preventDefault();setNotice('');
+    if(newPass.length<8){setNotice('Use a password with at least 8 characters.');return}
+    if(!configured){setNotice('Demo preview: connect Supabase to update your password.');return}
+    setBusy(true);
+    try{
+      const {error}=await supabase.auth.updateUser({password:newPass});
+      if(error)throw error;
+      setNewPass('');setPassword('');setAdminMode('login');
+      setNotice('Password updated successfully. You are logged in as admin.');
+    }catch(err){setNotice(err.message||'Could not update password.')}finally{setBusy(false)}
+  }
   function SideNav({onNavigate}){
     const tabs=['Overview','Deposit instructions','Packages','My Plans','Mining cycles','Reinvest','Rewards','Team','Transactions','Withdraw','Profile','Support'];
     const icons=[<LayoutDashboard/>,<Wallet/>,<Package/>,<Package/>,<Zap/>,<Activity/>,<Gift/>,<Users/>,<ChartNoAxesCombined/>,<Wallet/>,<UserRound/>,<CircleHelp/>];
     return <aside className="side"><Brand/>
       {tabs.map((x,i)=><button className={activeTab===x&&page==='dashboard'?'selected':''} onClick={()=>{setActiveTab(x);onNavigate('dashboard')}} key={x}>{icons[i]}{x}</button>)}
-      {role==='admin'&&<button className={page==='admin'?'selected':''} onClick={()=>onNavigate('admin')}><ShieldCheck/>Admin Panel</button>}
       <div className="salary"><CalendarDays/>Monthly Salary<small>Coming Soon</small></div>
       <button onClick={signOut}><LogOut/>Log out</button>
     </aside>;
@@ -210,10 +260,18 @@ function App(){
   const authVisual=<div className="authvisual"><div className="orb"><Cloud size={90}/><span>₿</span></div><h1>Welcome to <em>CloudMint</em></h1><p>Mine · Grow · Earn</p><div className="feature"><ShieldCheck/> Secure authentication</div><div className="feature"><Mail/> Email verification</div><div className="feature"><LockKeyhole/> Protected account access</div></div>;
   if(recovering)return <div className="authpage"><header className="topbar"><Brand/></header><div className="authstage">{authVisual}<div className="authcard"><form onSubmit={setNewPassword} className="authform"><h2>Set a new password</h2><p className="muted">Choose a new password for your account.</p><label>New password</label><div className="inputwrap"><KeyRound/><input type={showPass?'text':'password'} value={newPass} onChange={e=>setNewPass(e.target.value)} minLength="8" required placeholder="At least 8 characters"/><button type="button" className="iconbtn" onClick={()=>setShowPass(!showPass)}>{showPass?<EyeOff/>:<Eye/>}</button></div><Button disabled={busy}>{busy?'Saving…':'Update password'}</Button></form>{notice&&<div className="notice"><AlertTriangle size={16}/>{notice}</div>}</div></div></div>;
   if(page==='auth')return <div className="authpage"><header className="topbar"><a onClick={()=>setPage('home')}><Brand/></a><a className="navlink" onClick={()=>setPage('home')}>Back to home</a></header><div className="authstage">{authVisual}<div className="authcard">{authContent()}{notice&&<div className="notice"><AlertTriangle size={16}/>{notice}</div>}{!configured&&<p className="tiny">UI preview mode — auth becomes active after Supabase setup.</p>}</div></div></div>;
-  if(page==='admin'){
-    if(!session)return <div className="appdash"><SideNav onNavigate={setPage}/><main className="dashmain"><div className="placeholder"><h2>Please log in</h2><p>You need to be logged in to view this page.</p><Button kind="outline" onClick={()=>goAuth('login')}>Go to login</Button></div></main></div>;
-    if(role!=='admin')return <div className="appdash"><SideNav onNavigate={setPage}/><main className="dashmain"><div className="placeholder"><div className="bigicon"><ShieldCheck size={36}/></div><h2>Not authorized</h2><p>This area is restricted to administrators.</p><Button kind="outline" onClick={()=>setPage('dashboard')}>Back to dashboard</Button></div></main></div>;
-    return <div className="appdash"><SideNav onNavigate={setPage}/><main className="dashmain"><div className="dashhead"><div><small>ADMINISTRATION</small><h1>Admin Panel</h1></div><div className="userpill"><span className="statusdot"/>{session?.user?.email||'Admin'}</div></div><AdminPanel/></main></div>;
+  if(isAdminPath){
+    const isAdmin=!!(session&&roleChecked&&role==='admin');
+    if(isAdmin)return <div className="appdash"><aside className="side"><Brand/><button className="selected"><ShieldCheck/>Admin Panel</button><button onClick={signOut}><LogOut/>Log out</button></aside><main className="dashmain"><div className="dashhead"><div><small>ADMINISTRATION</small><h1>Admin Panel</h1></div><div className="userpill"><span className="statusdot"/>{session?.user?.email||'Admin'}</div></div><AdminPanel/></main></div>;
+    if(session&&!roleChecked)return <div className="authpage"><header className="topbar"><Brand/></header><div className="authstage">{authVisual}<div className="authcard"><p className="muted">Checking access…</p></div></div></div>;
+    if(session&&roleChecked)return <div className="authpage"><header className="topbar"><Brand/></header><div className="authstage">{authVisual}<div className="authcard"><div className="placeholder" style={{marginTop:0}}><div className="bigicon"><ShieldCheck size={36}/></div><h2>Not authorized</h2><p>This area is restricted to administrators.</p><Button kind="outline" onClick={signOut}>Log out</Button></div>{notice&&<div className="notice"><AlertTriangle size={16}/>{notice}</div>}</div></div></div>;
+    return <div className="authpage"><header className="topbar"><Brand/></header><div className="authstage">{authVisual}<div className="authcard">
+      {adminMode==='login'&&<form onSubmit={adminPasswordLogin} className="authform"><h2>Admin login</h2><p className="muted">Restricted area. Authorized administrators only.</p><label>Email address</label><div className="inputwrap"><Mail/><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@example.com" required/></div><label>Password</label><div className="inputwrap"><LockKeyhole/><input type={showPass?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="Your password" required/><button type="button" className="iconbtn" onClick={()=>setShowPass(!showPass)}>{showPass?<EyeOff/>:<Eye/>}</button></div><div className="authlinks"><a onClick={()=>{setAdminMode('forgot');setNotice('')}}>Forgot password?</a></div><Button disabled={busy}>{busy?'Signing in…':'Login'}</Button></form>}
+      {adminMode==='forgot'&&<form onSubmit={adminSendOtp} className="authform"><h2>Reset admin password</h2><p className="muted">Enter your admin email and we’ll send a verification code.</p><label>Email address</label><div className="inputwrap"><Mail/><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@example.com" required/></div><Button disabled={busy}>{busy?'Sending…':'Send OTP'}</Button><p className="switch"><a onClick={()=>{setAdminMode('login');setNotice('')}}>Back to login</a></p></form>}
+      {adminMode==='verify'&&<form onSubmit={adminVerifyOtp} className="authform"><h2>Verify code</h2><p className="muted">Enter the 6–8 digit code sent to <b>{email}</b>.</p><label>Verification code</label><div className="inputwrap"><ShieldCheck/><input inputMode="numeric" maxLength="8" value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,''))} placeholder="12345678" required/></div><Button disabled={busy}>{busy?'Verifying…':'Verify code'}</Button><p className="switch"><a onClick={()=>{setAdminMode('forgot');setNotice('')}}>Resend code</a></p></form>}
+      {adminMode==='newpass'&&<form onSubmit={adminSetPass} className="authform"><h2>Set a new password</h2><p className="muted">Choose a new password for the admin account.</p><label>New password</label><div className="inputwrap"><KeyRound/><input type={showPass?'text':'password'} value={newPass} onChange={e=>setNewPass(e.target.value)} minLength="8" required placeholder="At least 8 characters"/><button type="button" className="iconbtn" onClick={()=>setShowPass(!showPass)}>{showPass?<EyeOff/>:<Eye/>}</button></div><Button disabled={busy}>{busy?'Saving…':'Update password'}</Button></form>}
+      {notice&&<div className="notice"><AlertTriangle size={16}/>{notice}</div>}
+    </div></div></div>;
   }
   if(page==='dashboard')return <div className="appdash"><SideNav onNavigate={(p)=>{setPage(p)}}/><main className="dashmain"><div className="dashhead"><div><small>USER DASHBOARD</small><h1>{activeTab}</h1></div><div className="userpill"><span className="statusdot"/>{session?.user?.email||'Preview User'}</div></div>{activeTab==='Overview'?<><div className="welcome"><div><small>YOUR CLOUDMINT SPACE</small><h2>Grow your journey, one step at a time.</h2><p>Account activity and package information at a glance.</p></div><Brand/></div><div className="stats">{[['Available balance','$0.00',Wallet],['Pending deposits','$0.00',Activity],['Active plans','0',Package],['Team members','0',Users]].map(([t,v,I])=><div className="stat" key={t}><I/><small>{t}</small><b>{v}</b></div>)}</div><div className="dashsection"><div className="sectiontitle"><h2>Mining plans</h2><span>120-day plan duration</span></div><div className="plangrid">{plans.slice(0,3).map(p=><div className={`plan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Illustrative daily rate: {p.rate}</small><small>Duration: 120 days</small><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View plan</Button></div>)}</div></div><div className="dashsection"><div className="sectiontitle"><h2>Important</h2></div><div className="infoCard"><ShieldCheck/><div><b>Transparent account records</b><p>This preview does not accept deposits, promise returns, or process withdrawals. Connect a compliant payment provider and server-side transaction ledger before launch.</p></div></div></div></>:<div className="placeholder"><div className="bigicon"><Settings size={36}/></div><h2>{activeTab}</h2><p>This section is represented in the design preview. Live money movement, earnings, referrals and withdrawals require verified backend rules, authorization, and compliance review.</p><Button kind="outline" onClick={()=>setActiveTab('Overview')}>Back to overview</Button></div>}</main></div>;
   return <div className="site"><header className="topbar"><a onClick={()=>setPage('home')}><Brand/></a><button className="mobilemenu" onClick={()=>setMobileMenu(!mobileMenu)}>{mobileMenu?<X/>:<Menu/>}</button><nav className={mobileMenu?'open':''}><a href="#about">About</a><a href="#how">How it works</a><a href="#packages">Packages</a><a href="#rewards">Rewards</a><a href="#contact">Contact</a></nav><div className="topactions"><Button kind="outline" onClick={()=>goAuth('login')}>Login</Button><Button onClick={()=>goAuth('register-otp')}>Register <ArrowRight size={15}/></Button></div></header><section className="hero"><div className="hero-copy"><div className="eyebrow"><Zap size={14}/> CLOUDMINT PLATFORM</div><h1>Turn your crypto<br/>into <em>new possibilities.</em></h1><p>A modern platform concept for exploring packages, account tools and transparent activity records.</p><div className="heroactions"><Button onClick={()=>goAuth('register-otp')}>Get Started <ArrowRight size={17}/></Button><Button kind="outline" onClick={()=>goAuth('login')}>Login</Button></div><div className="trustrow"><span><ShieldCheck/> Security-minded</span><span><Zap/> Simple onboarding</span><span><Users/> Community tools</span></div></div><div className="heroart"><div className="artglow"></div><div className="cloudcoin"><Cloud size={190}/><div className="pick">⛏</div><div className="coin">₿</div><div className="circuit">━━━<br/>━━━<br/>━━━</div></div><div className="orbit"></div><div className="orbit orbit2"></div><div className="floatcoin c1">₿</div><div className="floatcoin c2">₿</div><div className="handnote">Mine · Grow · Earn</div></div></section><section className="metricbar"><div><Users/><b>Member tools</b><small>Account dashboard</small></div><div><Wallet/><b>Clear records</b><small>Transaction history</small></div><div><ShieldCheck/><b>Security first</b><small>Verified access</small></div><div><ChartNoAxesCombined/><b>Plan overview</b><small>See plan details</small></div></section><section className="section" id="about"><div className="sectionhead"><small>WHY CLOUDMINT</small><h2>A clear path from sign-up to dashboard</h2><p>Explore the platform design before creating an account.</p></div><div className="steps" id="how">{[['01','Create account','Register with your email and verify the one-time code.'],['02','Review details','Read package terms and funding instructions before taking action.'],['03','Track activity','See account records and plan status in your dashboard.'],['04','Get support','Use the official support and community links for help.']].map(([n,t,d])=><div className="step" key={n}><span>{n}</span><h3>{t}</h3><p>{d}</p></div>)}</div></section><section className="section packages" id="packages"><div className="sectionhead"><small>PACKAGE OVERVIEW</small><h2>Explore the plan designs</h2><p>All displayed prices and rates are illustrative placeholders, not a promise or offer of returns.</p></div><div className="publicplans">{plans.map(p=><div className={`publicplan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Illustrative rate: {p.rate}</small><small>Displayed duration: 120 days</small><Button onClick={()=>goAuth('login')}>Get Started <ArrowRight size={15}/></Button><p className="tiny">Login or register to continue.</p></div>)}</div></section><section className="section featurestrip" id="rewards"><div className="featurebox"><Gift/><h3>Rewards</h3><p>Reward thresholds and eligibility are displayed transparently after rules are configured.</p><a onClick={()=>goAuth('register-otp')}>Create account →</a></div><div className="featurebox"><Users/><h3>Team tools</h3><p>Referral tracking is planned; commissions must follow published and compliant rules.</p><a onClick={()=>goAuth('register-otp')}>Get started →</a></div><div className="featurebox"><CalendarDays/><h3>Monthly salary</h3><p>Coming Soon</p><span className="tag">COMING SOON</span></div><div className="featurebox"><ShieldCheck/><h3>Secure by design</h3><p>Use email verification and server-side authorization for account protection.</p><span className="tag green">SECURITY FIRST</span></div></section><footer id="contact"><Brand/><div className="footlinks"><a href="#about">About</a><a href="#packages">Packages</a><a onClick={()=>goAuth('login')}>Login</a><a onClick={()=>goAuth('register-otp')}>Register</a></div><div className="community"><a href="https://t.me/Jabid12" target="_blank" rel="noreferrer">Telegram</a><a href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer">WhatsApp Channel</a></div><small>© 2026 CloudMint. Preview build. Terms, privacy and product claims must be finalized before launch.</small></footer></div>
