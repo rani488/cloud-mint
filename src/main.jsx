@@ -271,7 +271,7 @@ function App(){
     const depAddr=siteAddrs[depChain]||'';
     const depInfo=CHAINS.find(x=>x.id===depChain)||CHAINS[0];
     const wdInfo=CHAINS.find(x=>x.id===wdChain)||CHAINS[0];
-    const refLink=typeof window!=='undefined'&&session?.user?window.location.origin+'/?ref='+session.user.id.slice(0,8):'';
+    const refCode=session?.user?session.user.id.slice(0,8):'';
     const txs=[...deposits.map(d=>({id:d.id,kind:'Deposit',amt:d.amount,chain:d.chain,status:d.status,created_at:d.created_at,sub:(d.tx_hash?String(d.tx_hash).slice(0,12)+'… · ':'')+d.chain})),...withdrawals.map(w=>({id:w.id,kind:'Withdrawal',amt:w.amount,chain:w.chain,status:w.status,created_at:w.created_at,sub:w.chain+' · '+String(w.wallet_address).slice(0,10)+'…'}))].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
     if(activeTab==='Deposit instructions')return <div className="tabwrap">
       <div className="sectiontitle"><h2>Deposit instructions</h2><span>manual review</span></div>
@@ -330,8 +330,8 @@ function App(){
     </div>;
     if(activeTab==='Team')return <div className="tabwrap">
       <div className="sectiontitle"><h2>Team</h2><span>display only</span></div>
-      <div className="infoCard"><Users/><div><b>Your referral link</b><p>Share this link. Referral tracking shown here is display-only.</p></div></div>
-      <div className="addrbox"><small>Referral link</small><p className="addrtext">{refLink||'Login to see your link.'}</p>{refLink&&<Button kind="outline" onClick={()=>copyText(refLink,'Referral link copied')}><Copy size={15}/> Copy link</Button>}</div>
+      <div className="infoCard"><Users/><div><b>Your referral code</b><p>Share this code with others. Referral tracking shown here is display-only.</p></div></div>
+      <div className="addrbox"><small>Referral code</small><p className="addrtext" style={{fontSize:24,letterSpacing:3}}>{refCode||'Login to see your code.'}</p>{refCode&&<Button kind="outline" onClick={()=>copyText(refCode,'Referral code copied')}><Copy size={15}/> Copy code</Button>}</div>
       <div className="stats" style={{marginTop:18}}><div className="stat"><Users/><small>Team members</small><b>0</b></div></div>
     </div>;
     if(activeTab==='Transactions')return <div className="tabwrap">
