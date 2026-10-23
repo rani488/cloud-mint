@@ -81,6 +81,7 @@
 .badge.pending{background:#2a1b0b;color:#ffd59a;border:1px solid #78562c}
 .badge.approved,.badge.completed{background:#06443c;color:#53f6c8;border:1px solid #0e6e5c}
 .badge.rejected{background:#3d0f16;color:#ff9aa5;border:1px solid #7c2230}
+.badge.reviewed{background:#0e2a4a;color:#9cc8ff;border:1px solid #2b5a8f}
 .rwd{font-size:18px;color:#53f6c8}
 .simbox{border:1px solid #17436a;border-radius:14px;background:#041525;padding:20px;margin-top:18px;display:grid;gap:14px}
 .simbar{height:12px;border-radius:99px;background:#0a2138;overflow:hidden}

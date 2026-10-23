@@ -75,6 +75,14 @@ function AdminPanel({tab,setTab}){
       setAmsg('Deposit addresses saved and live on the Deposit page.');
     }catch(err){setAmsg(err.message||'Could not save.')}finally{setSaving(false)}
   }
+  async function markReviewed(kind,id){
+    try{
+      const {error}=await supabase.from(kind==='dep'?'deposit_requests':'withdrawal_requests').update({status:'reviewed'}).eq('id',id);
+      if(error)throw error;
+      if(kind==='dep')setDeps(deps.map(x=>x.id===id?{...x,status:'reviewed'}:x));
+      else setWds(wds.map(x=>x.id===id?{...x,status:'reviewed'}:x));
+    }catch(err){setAmsg(err.message||'Could not update. (Run the admin-update SQL first.)')}
+  }
   async function toggleMaintenance(){
     const next=addrs.maintenance_mode==='on'?'off':'on';
     setSaving(true);setAmsg('');
@@ -107,7 +115,7 @@ function AdminPanel({tab,setTab}){
         <tbody>{deps.map(d=><tr key={d.id} style={{borderTop:'1px solid #12395c'}}>
           <td style={{padding:'11px 14px'}}>{d.email||'—'}</td><td style={{padding:'11px 14px'}}>{d.chain}</td><td style={{padding:'11px 14px'}}>${d.amount}</td>
           <td style={{padding:'11px 14px',fontFamily:'monospace',fontSize:11}} title={d.tx_hash}>{String(d.tx_hash).slice(0,10)}…{String(d.tx_hash).slice(-6)}</td>
-          <td style={{padding:'11px 14px'}}><span className={'badge '+d.status}>{d.status}</span></td>
+          <td style={{padding:'11px 14px'}}><span className={'badge '+(d.status||'pending')}>{d.status||'pending'}</span>{(d.status||'pending')!=='reviewed'&&<button style={{marginLeft:8,background:'transparent',border:'1px solid #2b5a8f',color:'#9cc8ff',borderRadius:99,padding:'3px 10px',fontSize:10,fontWeight:700,cursor:'pointer'}} onClick={()=>markReviewed('dep',d.id)}>Mark reviewed</button>}</td>
           <td style={{padding:'11px 14px',color:'#9db5d0'}}>{d.created_at?new Date(d.created_at).toLocaleString():'—'}</td>
         </tr>)}{deps.length===0&&<tr><td colSpan="6" style={{padding:'16px',color:'#9db5d0'}}>No deposit requests.</td></tr>}</tbody>
       </table>
@@ -120,7 +128,7 @@ function AdminPanel({tab,setTab}){
         <tbody>{wds.map(w=><tr key={w.id} style={{borderTop:'1px solid #12395c'}}>
           <td style={{padding:'11px 14px'}}>{w.email||'—'}</td><td style={{padding:'11px 14px'}}>{w.chain}</td><td style={{padding:'11px 14px'}}>${w.amount}</td>
           <td style={{padding:'11px 14px',fontFamily:'monospace',fontSize:11}} title={w.wallet_address}>{String(w.wallet_address).slice(0,10)}…{String(w.wallet_address).slice(-6)}</td>
-          <td style={{padding:'11px 14px'}}><span className={'badge '+w.status}>{w.status}</span></td>
+          <td style={{padding:'11px 14px'}}><span className={'badge '+(w.status||'pending')}>{w.status||'pending'}</span>{(w.status||'pending')!=='reviewed'&&<button style={{marginLeft:8,background:'transparent',border:'1px solid #2b5a8f',color:'#9cc8ff',borderRadius:99,padding:'3px 10px',fontSize:10,fontWeight:700,cursor:'pointer'}} onClick={()=>markReviewed('wd',w.id)}>Mark reviewed</button>}</td>
           <td style={{padding:'11px 14px',color:'#9db5d0'}}>{w.created_at?new Date(w.created_at).toLocaleString():'—'}</td>
         </tr>)}{wds.length===0&&<tr><td colSpan="6" style={{padding:'16px',color:'#9db5d0'}}>No withdrawal requests.</td></tr>}</tbody>
       </table>
