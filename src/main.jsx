@@ -306,7 +306,7 @@ function PackageManager({packs,setPacks}){
 }
 
 function AIMachinePlan({plan,since}){
-  const CYCLE=86400000, R=88, CIRC=2*Math.PI*R;
+  const CYCLE=86400000, R=104, CIRC=2*Math.PI*R;
   const dur=Number(plan.dur)||120;
   const [now,setNow]=useState(()=>Date.now());
   const [t0,setT0]=useState(()=>{try{const s=JSON.parse(localStorage.getItem('cm_cycle')||'null');if(s&&s.plan===plan.name&&s.t0)return s.t0;}catch{}return 0;});
@@ -318,23 +318,37 @@ function AIMachinePlan({plan,since}){
   const dayN=sinceMs?Math.max(1,Math.floor((now-sinceMs)/86400000)+1):0;
   const dayProg=sinceMs?Math.min(1,Math.max(0,(now-sinceMs)/(dur*86400000))):0;
   const termDone=dayN>dur;
+  const net=useMemo(()=>{let sd=7;const rnd=()=>{sd=(sd*1664525+1013904223)>>>0;return sd/4294967296;};
+    const pts=[],N=26,RR=56;
+    for(let i=0;i<N;i++){const a=rnd()*Math.PI*2,r=RR*Math.sqrt(rnd());pts.push({x:120+r*Math.cos(a),y:120+r*Math.sin(a),d:(rnd()*2.6).toFixed(2),r:(1.8+rnd()*1.7).toFixed(1)});}
+    const edges=[];
+    for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){if(Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y)<50)edges.push([i,j]);}
+    return {pts,edges};},[]);
   const start=()=>{const t=Date.now();setT0(t);setNow(t);try{localStorage.setItem('cm_cycle',JSON.stringify({plan:plan.name,t0:t}));}catch{}};
-  return <div className="aimachine">
-    <div className="aimachine-glow"/><div className="aimachine-shine"/>
-    <div className="aimachine-head"><small>ACTIVE PLAN</small><h2>{plan.name} Plan</h2><span className="badge approved">active</span></div>
-    <div className="aimachine-core">
-      <div className="aimachine-beam"/>
-      <svg className="aimachine-ring" viewBox="0 0 200 200">
-        <defs><linearGradient id="aigrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#53f6c8"/><stop offset="1" stopColor="#22d3ee"/></linearGradient></defs>
-        <circle cx="100" cy="100" r={R} className="aimachine-track"/>
-        <circle cx="100" cy="100" r={R} className="aimachine-progress" strokeDasharray={CIRC} strokeDashoffset={CIRC*(1-prog)}/>
+  return <div className="ncore">
+    <div className="ncore-ambient"/>
+    <div className="ncore-head"><small>ACTIVE PLAN</small><h2>{plan.name} Plan</h2><span className="badge approved">active</span></div>
+    <div className="ncore-stage">
+      <svg className="ncore-ring" viewBox="0 0 240 240">
+        <defs>
+          <linearGradient id="ncgrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#53f6c8"/><stop offset="1" stopColor="#22d3ee"/></linearGradient>
+          <radialGradient id="ncglow" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#22d3ee" stopOpacity=".5"/><stop offset="55%" stopColor="#22d3ee" stopOpacity=".12"/><stop offset="100%" stopColor="#22d3ee" stopOpacity="0"/></radialGradient>
+        </defs>
+        <circle cx="120" cy="120" r="112" fill="url(#ncglow)"/>
+        <g className="ncore-spin-a"><ellipse cx="120" cy="120" rx="106" ry="40" className="ncore-orbit"/><circle cx="226" cy="120" r="3.4" className="ncore-sat"/></g>
+        <g className="ncore-spin-b"><ellipse cx="120" cy="120" rx="106" ry="40" className="ncore-orbit dim"/><circle cx="14" cy="120" r="2.6" className="ncore-sat dim"/></g>
+        <circle cx="120" cy="120" r={R} className="ncore-track"/>
+        <circle cx="120" cy="120" r={R} className="ncore-prog" strokeDasharray={CIRC} strokeDashoffset={CIRC*(1-prog)}/>
+        <g className="ncore-net">
+          {net.edges.map((e,i)=><line key={'e'+i} x1={net.pts[e[0]].x} y1={net.pts[e[0]].y} x2={net.pts[e[1]].x} y2={net.pts[e[1]].y} className="ncore-edge"/>)}
+          {net.pts.map((p,i)=><circle key={'n'+i} cx={p.x} cy={p.y} r={p.r} className="ncore-node" style={{animationDelay:p.d+'s'}}/>)}
+          <circle cx="120" cy="120" r="9" className="ncore-heart"/>
+        </g>
       </svg>
-      <div className="aimachine-orbit o1"/><div className="aimachine-orbit o2"/>
-      <div className="aimachine-orb"><span>{plan.icon||'◆'}</span></div>
-      <div className="aimachine-pdot p1"/><div className="aimachine-pdot p2"/><div className="aimachine-pdot p3"/>
+      <span className="ncore-p p1"/><span className="ncore-p p2"/><span className="ncore-p p3"/><span className="ncore-p p4"/><span className="ncore-p p5"/><span className="ncore-p p6"/>
     </div>
-    <div className="aimachine-count">{done?'00:00:00':hh+':'+mm+':'+ss}</div>
-    <small className="aimachine-cycle-label">{!t0?'24-HOUR CYCLE':done?'CYCLE COMPLETE':'CYCLE RUNNING'}</small>
+    <div className="ncore-count">{done?'00:00:00':hh+':'+mm+':'+ss}</div>
+    <small className="ncore-clabel">{!t0?'24-HOUR CYCLE':done?'CYCLE COMPLETE':'CYCLE RUNNING'}</small>
     {sinceMs>0&&<div className="aimachine-term">
       <div className="aimachine-daylabel">{termDone?'PLAN PERIOD COMPLETE':'DAY '+dayN+' OF '+dur}</div>
       <div className="aimachine-daybar"><div className="aimachine-dayfill" style={{width:(dayProg*100).toFixed(2)+'%'}}/></div>

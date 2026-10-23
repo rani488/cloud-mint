@@ -174,3 +174,31 @@ footer{padding:22px 6.5%}
 .aimachine-dayfill{height:100%;border-radius:99px;background:linear-gradient(90deg,#53f6c8,#22d3ee);box-shadow:0 0 14px rgba(34,211,238,.75);transition:width 1s linear}
 @keyframes aimdayglow{0%,100%{opacity:1}50%{opacity:.6}}
 @keyframes aimshine{0%{left:-90px}55%,100%{left:112%}}
+
+/* Neural Core machine (concept 1) */
+.ncore{position:relative;overflow:hidden;border-radius:22px;padding:26px 18px 22px;text-align:center;background:radial-gradient(120% 90% at 50% 0%,#0a1830 0%,#060b16 60%,#04070f 100%);border:1px solid #16304a;box-shadow:0 0 44px rgba(34,211,238,.10),inset 0 0 70px rgba(34,211,238,.05)}
+.ncore-ambient{position:absolute;inset:-45%;background:conic-gradient(from 0deg,transparent,rgba(34,211,238,.07),transparent 32%);animation:aimspin 16s linear infinite;pointer-events:none}
+.ncore-head{position:relative;z-index:2}
+.ncore-head small{letter-spacing:3px;color:#7d93b2;font-size:11px}
+.ncore-head h2{margin:6px 0 8px;font-size:24px;color:#eaf4ff;text-shadow:0 0 18px rgba(34,211,238,.45)}
+.ncore-stage{position:relative;width:264px;height:264px;margin:8px auto 2px;z-index:2}
+.ncore-ring{width:100%;height:100%;overflow:visible}
+.ncore-track{fill:none;stroke:#12283f;stroke-width:7}
+.ncore-prog{fill:none;stroke:url(#ncgrad);stroke-width:7;stroke-linecap:round;transform:rotate(-90deg);transform-origin:120px 120px;filter:drop-shadow(0 0 6px rgba(34,211,238,.85));transition:stroke-dashoffset 1s linear}
+.ncore-orbit{fill:none;stroke:rgba(83,246,200,.4);stroke-width:1.3}
+.ncore-orbit.dim{stroke:rgba(34,211,238,.28)}
+.ncore-spin-a{transform-origin:120px 120px;animation:aimspin 9s linear infinite}
+.ncore-spin-b{transform-origin:120px 120px;animation:aimspinrev 15s linear infinite}
+.ncore-sat{fill:#53f6c8;filter:drop-shadow(0 0 6px #53f6c8)}
+.ncore-sat.dim{fill:#22d3ee;filter:drop-shadow(0 0 5px #22d3ee)}
+.ncore-net{transform-origin:120px 120px;animation:aimspin 46s linear infinite}
+.ncore-edge{stroke:rgba(83,246,200,.30);stroke-width:.8}
+.ncore-node{fill:#a9f5e9;filter:drop-shadow(0 0 4px #53f6c8);animation:ncnode 2.6s ease-in-out infinite}
+.ncore-heart{fill:#eafffb;filter:drop-shadow(0 0 12px #22d3ee);animation:ncnode 1.8s ease-in-out infinite}
+@keyframes ncnode{0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes aimspinrev{to{transform:rotate(-360deg)}}
+.ncore-p{position:absolute;bottom:8px;width:5px;height:5px;border-radius:50%;background:#67e8f9;box-shadow:0 0 9px #22d3ee;opacity:0;animation:ncrise 5.5s ease-in infinite}
+.ncore-p.p1{left:18%}.ncore-p.p2{left:34%;animation-delay:1.4s}.ncore-p.p3{left:52%;animation-delay:2.6s}.ncore-p.p4{left:66%;animation-delay:.8s}.ncore-p.p5{left:80%;animation-delay:3.4s}.ncore-p.p6{left:44%;animation-delay:4.4s}
+@keyframes ncrise{0%{transform:translateY(0);opacity:0}18%{opacity:.9}100%{transform:translateY(-230px);opacity:0}}
+.ncore-count{position:relative;z-index:2;font-family:ui-monospace,Menlo,monospace;font-size:34px;font-weight:800;letter-spacing:3px;color:#eafffb;text-shadow:0 0 22px rgba(34,211,238,.65);margin-top:6px}
+.ncore-clabel{position:relative;z-index:2;display:block;letter-spacing:3px;font-size:11px;color:#7d93b2;margin:6px 0 2px}
