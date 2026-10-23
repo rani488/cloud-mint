@@ -434,6 +434,12 @@ function App(){
   };
   useEffect(()=>{ if(session?.user&&['Overview','Deposit instructions','Withdraw','Packages','My Plans','Transactions','Profile'].includes(activeTab))refreshUserData(); },[activeTab]);
   useEffect(()=>{
+    const onVisible=()=>{ if(document.visibilityState==='visible')refreshUserData(); };
+    document.addEventListener('visibilitychange',onVisible);
+    window.addEventListener('focus',onVisible);
+    return ()=>{document.removeEventListener('visibilitychange',onVisible);window.removeEventListener('focus',onVisible);};
+  },[session,activeTab]);
+  useEffect(()=>{
     let cancelled=false;
     (async()=>{
       if(!supabase||!session?.user)return;
