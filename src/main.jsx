@@ -37,8 +37,7 @@ const SECTION_KEYS=DEFAULT_MENU.map(m=>m.tab_key);
 function Brand(){return <div className="brand"><div className="brandmark"><Cloud size={29}/><span>₿</span></div><div><b>CloudMint</b><small>Mine · Grow · Earn</small></div></div>}
 function Button({children,kind='primary',...props}){return <button className={`btn ${kind}`} {...props}>{children}</button>}
 
-function AdminPanel(){
-  const [tab,setTab]=useState('users');
+function AdminPanel({tab,setTab}){
   const [users,setUsers]=useState([]);
   const [packs,setPacks]=useState([]);
   const [deps,setDeps]=useState([]);
@@ -88,14 +87,6 @@ function AdminPanel(){
   }
   return <div className="dashsection">
     <div className="sectiontitle"><h2>Admin Panel</h2><span>restricted access</span></div>
-    <div className="heroactions" style={{margin:'0 0 18px',flexWrap:'wrap'}}>
-      <Button kind={tab==='users'?'primary':'outline'} onClick={()=>setTab('users')}>Users</Button>
-      <Button kind={tab==='packages'?'primary':'outline'} onClick={()=>setTab('packages')}>Packages</Button>
-      <Button kind={tab==='deposits'?'primary':'outline'} onClick={()=>setTab('deposits')}>Deposits</Button>
-      <Button kind={tab==='withdrawals'?'primary':'outline'} onClick={()=>setTab('withdrawals')}>Withdrawals</Button>
-      <Button kind={tab==='settings'?'primary':'outline'} onClick={()=>setTab('settings')}>Settings</Button>
-      <Button kind={tab==='menu'?'primary':'outline'} onClick={()=>setTab('menu')}>Menu</Button>
-    </div>
     {loading?<p className="muted">Loading records…</p>:tab==='users'?<div className="infoCard" style={{display:'block',padding:0,overflow:'hidden'}}>
       <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
         <thead><tr style={{textAlign:'left',color:'#9db5d0'}}>
@@ -107,11 +98,7 @@ function AdminPanel(){
           <td style={{padding:'11px 14px',color:'#9db5d0'}}>{u.created_at?new Date(u.created_at).toLocaleDateString():'—'}</td>
         </tr>)}{users.length===0&&<tr><td colSpan="5" style={{padding:'16px',color:'#9db5d0'}}>No users found.</td></tr>}</tbody>
       </table>
-    </div>:tab==='packages'?<div className="plangrid">{packs.map(p=><div className="plan" key={p.id}>
-      <h3>{p.name} Plan</h3><b className="price">${p.price}</b>
-      <small>Illustrative rate: {p.display_rate}%</small><small>Duration: {p.duration_days} days</small>
-      <small style={{color:p.is_active?'#53f6c8':'#9db5d0'}}>{p.is_active?'Active':'Inactive'}</small>
-    </div>)}{packs.length===0&&<p className="muted">No packages found.</p>}</div>
+    </div>:tab==='packages'?<PackageManager packs={packs} setPacks={setPacks}/>
     :tab==='deposits'?<div className="infoCard" style={{display:'block',padding:0,overflowX:'auto'}}>
       <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:640}}>
         <thead><tr style={{textAlign:'left',color:'#9db5d0'}}>
@@ -225,6 +212,70 @@ function MenuManager(){
   </div>;
 }
 
+function PackageManager({packs,setPacks}){
+  const [msg,setMsg]=useState('');
+  const [editing,setEditing]=useState(null);
+  const [f,setF]=useState({name:'',price:'',display_rate:'',duration_days:'120',is_active:true});
+  const [busy2,setBusy2]=useState(false);
+  const startNew=()=>{setEditing('new');setF({name:'',price:'',display_rate:'',duration_days:'120',is_active:true});setMsg('')};
+  const startEdit=(p)=>{setEditing(p.id);setF({name:p.name||'',price:String(p.price??''),display_rate:p.display_rate==null?'':String(p.display_rate),duration_days:String(p.duration_days||120),is_active:!!p.is_active});setMsg('')};
+  const save=async(e)=>{
+    e.preventDefault();setMsg('');
+    const price=parseFloat(f.price),rate=f.display_rate.trim()===''?null:parseFloat(f.display_rate),dur=parseInt(f.duration_days,10);
+    if(!f.name.trim()||!(price>=0)||!(dur>0)||(rate!==null&&!(rate>=0))){setMsg('Enter a valid name, price, rate and duration.');return}
+    const row={name:f.name.trim(),price,display_rate:rate,duration_days:dur,is_active:!!f.is_active};
+    setBusy2(true);
+    try{
+      if(editing==='new'){
+        const {data,error}=await supabase.from('packages').insert(row).select().single();
+        if(error)throw error;
+        setPacks([...packs,data].sort((a,b)=>Number(a.price)-Number(b.price)));
+      }else{
+        const {error}=await supabase.from('packages').update(row).eq('id',editing);
+        if(error)throw error;
+        setPacks(packs.map(p=>p.id===editing?{...p,...row}:p));
+      }
+      setEditing(null);setMsg('Package saved — live on the site.');
+    }catch(err){setMsg(err.message||'Could not save.')}finally{setBusy2(false)}
+  };
+  const toggleActive=async(p)=>{
+    const {error}=await supabase.from('packages').update({is_active:!p.is_active}).eq('id',p.id);
+    if(error)setMsg(error.message);else setPacks(packs.map(x=>x.id===p.id?{...x,is_active:!p.is_active}:x));
+  };
+  const del=async(id)=>{
+    if(!window.confirm('Delete this package?'))return;
+    const {error}=await supabase.from('packages').delete().eq('id',id);
+    if(error)setMsg(error.message);else{setPacks(packs.filter(p=>p.id!==id));setMsg('Package deleted.')}
+  };
+  return <div>
+    <div style={{marginBottom:14}}><Button onClick={startNew}>+ Add package</Button></div>
+    {editing&&<form onSubmit={save} className="stackform" style={{marginBottom:20}}>
+      <div className="sectiontitle"><h2>{editing==='new'?'New package':'Edit package'}</h2></div>
+      <div><label>Name</label><input value={f.name} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Starter"/></div>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+        <div style={{flex:1,minWidth:120}}><label>Price (USD)</label><input inputMode="decimal" value={f.price} onChange={e=>setF({...f,price:e.target.value})} placeholder="50"/></div>
+        <div style={{flex:1,minWidth:120}}><label>Illustrative rate %</label><input inputMode="decimal" value={f.display_rate} onChange={e=>setF({...f,display_rate:e.target.value})} placeholder="2.00"/></div>
+        <div style={{flex:1,minWidth:120}}><label>Duration (days)</label><input inputMode="numeric" value={f.duration_days} onChange={e=>setF({...f,duration_days:e.target.value})} placeholder="120"/></div>
+      </div>
+      <label className="tiny" style={{display:'flex',alignItems:'center',gap:8}}><input type="checkbox" checked={f.is_active} onChange={e=>setF({...f,is_active:e.target.checked})}/> Active (visible on site)</label>
+      <div style={{display:'flex',gap:8}}><Button disabled={busy2}>{busy2?'Saving…':'Save package'}</Button><Button kind="outline" onClick={()=>setEditing(null)}>Cancel</Button></div>
+    </form>}
+    <div className="txlist">{packs.map(p=><div className="mrow" key={p.id}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+        <div><b>{p.name}</b> <span className="tiny">· ${p.price} · {p.display_rate==null?'—':p.display_rate+'%'} · {p.duration_days}d</span></div>
+        <span className={'badge '+(p.is_active?'approved':'pending')}>{p.is_active?'active':'hidden'}</span>
+      </div>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+        <Button kind="outline" onClick={()=>startEdit(p)}>Edit</Button>
+        <Button kind="outline" onClick={()=>toggleActive(p)}>{p.is_active?'Hide':'Show'}</Button>
+        <Button kind="outline" onClick={()=>del(p.id)}>Delete</Button>
+      </div>
+    </div>)}{packs.length===0&&<p className="muted">No packages yet.</p>}</div>
+    {msg&&<p className="muted" style={{marginTop:10}}>{msg}</p>}
+    <p className="tiny" style={{marginTop:10}}>Rates are illustrative labels only — packages never credit earnings automatically.</p>
+  </div>;
+}
+
 function App(){
   const [page,setPage]=useState(()=>{try{return localStorage.getItem('cm_page')||'home'}catch{return 'home'}});
   const [authMode,setAuthMode]=useState('login');
@@ -251,12 +302,25 @@ function App(){
   const [roleChecked,setRoleChecked]=useState(false);
   const [adminMode,setAdminMode]=useState('login');
   const [menuOpen,setMenuOpen]=useState(typeof window!=='undefined'?window.innerWidth>650:true);
+  const [adminTab,setAdminTab]=useState('users');
   const [profile,setProfile]=useState(null);
   const [deposits,setDeposits]=useState([]);
   const [withdrawals,setWithdrawals]=useState([]);
   const [siteAddrs,setSiteAddrs]=useState({TRON:'',BNB:'0x73173d35F5D5d6518EF8d32b65d85Ca7910D2376'});
   const [menuItems,setMenuItems]=useState([]);
   const [maintenance,setMaintenance]=useState(false);
+  const [dbPacks,setDbPacks]=useState([]);
+  useEffect(()=>{
+    if(!supabase)return;
+    (async()=>{
+      try{
+        const {data}=await supabase.from('packages').select('*').eq('is_active',true).order('price');
+        if(data&&data.length)setDbPacks(data);
+      }catch{}
+    })();
+  },[]);
+  const TONES=['cyan','purple','teal','gold'],PICONS=['◆','⬢','◈','✦','✧'];
+  const livePlans=dbPacks.length?dbPacks.map((p,i)=>({name:p.name,price:Number(p.price),rate:(p.display_rate==null?'—':Number(p.display_rate).toFixed(2)+'%'),dur:p.duration_days,tone:TONES[i%4],icon:PICONS[i%5],popular:i===1})):plans;
   useEffect(()=>{
     if(!supabase)return;
     (async()=>{
@@ -420,7 +484,7 @@ function App(){
     </div>;
     if(activeTab==='Packages')return <div className="tabwrap">
       <div className="sectiontitle"><h2>Packages</h2><span>120-day duration</span></div>
-      <div className="plangrid">{plans.map(p=><div className={`plan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Illustrative daily rate: {p.rate}</small><small>Duration: 120 days</small><Button kind="outline" onClick={()=>{setDepAmount(String(p.price));setActiveTab('Deposit instructions');window.scrollTo(0,0)}}>Deposit to activate</Button></div>)}</div>
+      <div className="plangrid">{livePlans.map(p=><div className={`plan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Illustrative daily rate: {p.rate}</small><small>Duration: {p.dur||120} days</small><Button kind="outline" onClick={()=>{setDepAmount(String(p.price));setActiveTab('Deposit instructions');window.scrollTo(0,0)}}>Deposit to activate</Button></div>)}</div>
       <div className="infoCard" style={{marginTop:18}}><ShieldCheck/><div><b>Transparent notice</b><p>Displayed prices and rates are illustrative. A deposit does not automatically activate anything — activation is confirmed manually after review.</p></div></div>
     </div>;
     if(activeTab==='My Plans')return <div className="tabwrap">
@@ -632,7 +696,22 @@ function App(){
   if(page==='auth')return <div className="authpage"><header className="topbar"><a onClick={()=>setPage('home')}><Brand/></a><a className="navlink" onClick={()=>setPage('home')}>Back to home</a></header><div className="authstage">{authVisual}<div className="authcard">{authContent()}{notice&&<div className="notice"><AlertTriangle size={16}/>{notice}</div>}{!configured&&<p className="tiny">UI preview mode — auth becomes active after Supabase setup.</p>}</div></div></div>;
   if(isAdminPath){
     const isAdmin=!!(session&&roleChecked&&role==='admin');
-    if(isAdmin)return <div className="appdash"><aside className="side"><Brand/><button className="selected"><ShieldCheck/>Admin Panel</button><button onClick={signOut}><LogOut/>Log out</button></aside><main className="dashmain"><div className="dashhead"><div><small>ADMINISTRATION</small><h1>Admin Panel</h1></div><div className="userpill"><span className="statusdot"/>{session?.user?.email||'Admin'}</div></div><AdminPanel/></main></div>;
+    if(isAdmin){
+      const atabs=[['users','Users',Users],['packages','Packages',Package],['deposits','Deposits',Wallet],['withdrawals','Withdrawals',Wallet],['settings','Settings',Settings],['menu','Menu',Menu]];
+      return <div className={'appdash'+(menuOpen?'':' menuClosed')}>
+        <div className={'drawerBackdrop'+(menuOpen?' open':'')} onClick={()=>setMenuOpen(false)}/>
+        <aside className={'side'+(menuOpen?' open':'')}>
+          <Brand/><button className="drawerClose" onClick={()=>setMenuOpen(false)} aria-label="Close menu"><X/></button>
+          {atabs.map(([k,l,I])=><button className={adminTab===k?'selected':''} onClick={()=>{setAdminTab(k);if(typeof window!=='undefined'&&window.innerWidth<=650)setMenuOpen(false)}} key={k}><I/>{l}</button>)}
+          <button onClick={signOut}><LogOut/>Log out</button>
+        </aside>
+        <main className="dashmain">
+          <div className="dashTopbar"><button className="hamburger" onClick={()=>setMenuOpen(!menuOpen)} aria-label="Open menu"><Menu/></button><Brand/></div>
+          <div className="dashhead"><div><small>ADMINISTRATION</small><h1>Admin Panel</h1></div><div className="userpill" style={{maxWidth:'none'}}><span className="statusdot"/>{session?.user?.email||'Admin'}</div></div>
+          <AdminPanel tab={adminTab} setTab={setAdminTab}/>
+        </main>
+      </div>;
+    }
     if(session&&!roleChecked)return <div className="authpage"><header className="topbar"><Brand/></header><div className="authstage">{authVisual}<div className="authcard"><p className="muted">Checking access…</p></div></div></div>;
     if(session&&roleChecked)return <div className="authpage"><header className="topbar"><Brand/></header><div className="authstage">{authVisual}<div className="authcard"><div className="placeholder" style={{marginTop:0}}><div className="bigicon"><ShieldCheck size={36}/></div><h2>Not authorized</h2><p>This area is restricted to administrators.</p><Button kind="outline" onClick={signOut}>Log out</Button></div>{notice&&<div className="notice"><AlertTriangle size={16}/>{notice}</div>}</div></div></div>;
     return <div className="authpage"><header className="topbar"><Brand/></header><div className="authstage">{authVisual}<div className="authcard">
@@ -644,7 +723,7 @@ function App(){
     </div></div></div>;
   }
   if(maintenance)return <div className="authpage"><header className="topbar"><Brand/></header><div className="authstage"><div className="authcard" style={{textAlign:'center'}}><div className="bigicon"><Settings size={44}/></div><h2>Under maintenance</h2><p className="muted">CloudMint is undergoing scheduled maintenance. Please check back soon.</p><div className="supportrow" style={{margin:'18px auto 0'}}><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/> Telegram</a><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/> WhatsApp</a></div></div></div></div>;
-  if(page==='dashboard')return <div className={'appdash'+(menuOpen?'':' menuClosed')}><div className={'drawerBackdrop'+(menuOpen?' open':'')} onClick={()=>setMenuOpen(false)}/><SideNav open={menuOpen} onClose={()=>setMenuOpen(false)} onNavigate={(p)=>{setPage(p);if(typeof window!=='undefined'&&window.innerWidth<=650)setMenuOpen(false)}}/><main className="dashmain">{toast&&<div className="dashtoast">{toast}</div>}<div className="dashTopbar"><button className="hamburger" onClick={()=>setMenuOpen(!menuOpen)} aria-label="Open menu"><Menu/></button><Brand/></div><div className="dashhead"><div><small>USER DASHBOARD</small><h1>{activeTab}</h1></div><div className="userpill"><span className="statusdot"/>{session?.user?.email||'Preview User'}</div></div>{activeTab==='Overview'?<><div className="stats">{[['Available balance','$0.00',Wallet],['Pending deposits','$0.00',Activity],['Active plans','0',Package],['Team members','0',Users]].map(([t,v,I])=><div className="stat" key={t}><I/><small>{t}</small><b>{v}</b></div>)}</div><div className="welcome"><div><small>YOUR CLOUDMINT SPACE</small><h2>Grow your journey, one step at a time.</h2><p>Account activity and package information at a glance.</p></div><Brand/></div><div className="dashsection"><div className="sectiontitle"><h2>Mining plans</h2><span>120-day plan duration</span></div><div className="plangrid">{plans.slice(0,3).map(p=><div className={`plan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Illustrative daily rate: {p.rate}</small><small>Duration: 120 days</small><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View plan</Button></div>)}</div></div><div className="dashsection"><div className="sectiontitle"><h2>Important</h2></div><div className="infoCard"><ShieldCheck/><div><b>Transparent account records</b><p>This preview does not accept deposits, promise returns, or process withdrawals. Connect a compliant payment provider and server-side transaction ledger before launch.</p></div></div></div></>:TabBody()}</main></div>;
-  return <div className="site"><header className="topbar"><button className="mobilemenu" onClick={()=>setMobileMenu(!mobileMenu)} aria-label="Menu">{mobileMenu?<X/>:<Menu/>}</button><a onClick={()=>setPage('home')}><Brand/></a><nav className={mobileMenu?'open':''}><a href="#about" onClick={()=>setMobileMenu(false)}>About</a><a href="#how" onClick={()=>setMobileMenu(false)}>How it works</a><a href="#packages" onClick={()=>setMobileMenu(false)}>Packages</a><a href="#rewards" onClick={()=>setMobileMenu(false)}>Rewards</a><a href="#contact" onClick={()=>setMobileMenu(false)}>Contact</a><div className="navbtns"><Button kind="outline" onClick={()=>{setMobileMenu(false);goAuth('login')}}>Login</Button><Button onClick={()=>{setMobileMenu(false);goAuth('register-otp')}}>Register <ArrowRight size={15}/></Button><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/>WhatsApp</a><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/>Telegram</a></div></nav></header><section className="hero"><div className="hero-copy"><div className="eyebrow"><Zap size={14}/> CLOUDMINT PLATFORM</div><h1>Turn your crypto<br/>into <em>new possibilities.</em></h1><p>A modern platform concept for exploring packages, account tools and transparent activity records.</p><div className="heroactions"><Button onClick={()=>goAuth('register-otp')}>Get Started <ArrowRight size={17}/></Button><Button kind="outline" onClick={()=>goAuth('login')}>Login</Button><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/>WhatsApp</a><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/>Telegram</a></div><div className="trustrow"><span><ShieldCheck/> Security-minded</span><span><Zap/> Simple onboarding</span><span><Users/> Community tools</span></div></div><div className="heroart"><div className="artglow"></div><div className="cloudcoin"><Cloud size={190}/><div className="pick">⛏</div><div className="coin">₿</div><div className="circuit">━━━<br/>━━━<br/>━━━</div></div><div className="orbit"></div><div className="orbit orbit2"></div><div className="floatcoin c1">₿</div><div className="floatcoin c2">₿</div><div className="handnote">Mine · Grow · Earn</div></div></section><section className="metricbar"><div><Users/><b>Member tools</b><small>Account dashboard</small></div><div><Wallet/><b>Clear records</b><small>Transaction history</small></div><div><ShieldCheck/><b>Security first</b><small>Verified access</small></div><div><ChartNoAxesCombined/><b>Plan overview</b><small>See plan details</small></div></section><section className="section" id="about"><div className="sectionhead"><small>WHY CLOUDMINT</small><h2>A clear path from sign-up to dashboard</h2><p>Explore the platform design before creating an account.</p></div><div className="steps" id="how">{[['01','Create account','Register with your email and verify the one-time code.'],['02','Review details','Read package terms and funding instructions before taking action.'],['03','Track activity','See account records and plan status in your dashboard.'],['04','Get support','Use the official support and community links for help.']].map(([n,t,d])=><div className="step" key={n}><span>{n}</span><h3>{t}</h3><p>{d}</p></div>)}</div></section><section className="section packages" id="packages"><div className="sectionhead"><small>PACKAGE OVERVIEW</small><h2>Explore the plan designs</h2><p>All displayed prices and rates are illustrative placeholders, not a promise or offer of returns.</p></div><div className="publicplans">{plans.map(p=><div className={`publicplan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Illustrative rate: {p.rate}</small><small>Displayed duration: 120 days</small><Button onClick={()=>goAuth('login')}>Get Started <ArrowRight size={15}/></Button><p className="tiny">Login or register to continue.</p></div>)}</div></section><section className="section featurestrip" id="rewards"><div className="featurebox"><Gift/><h3>Rewards</h3><p>Reward thresholds and eligibility are displayed transparently after rules are configured.</p><a onClick={()=>goAuth('register-otp')}>Create account →</a></div><div className="featurebox"><Users/><h3>Team tools</h3><p>Referral tracking is planned; commissions must follow published and compliant rules.</p><a onClick={()=>goAuth('register-otp')}>Get started →</a></div><div className="featurebox"><CalendarDays/><h3>Monthly salary</h3><p>Coming Soon</p><span className="tag">COMING SOON</span></div><div className="featurebox"><ShieldCheck/><h3>Secure by design</h3><p>Use email verification and server-side authorization for account protection.</p><span className="tag green">SECURITY FIRST</span></div></section><footer id="contact"><Brand/><div className="footlinks"><a href="#about">About</a><a href="#packages">Packages</a><a onClick={()=>goAuth('login')}>Login</a><a onClick={()=>goAuth('register-otp')}>Register</a></div><div className="community"><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/>WhatsApp</a><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/>Telegram</a></div><small>© 2026 CloudMint. Preview build. Terms, privacy and product claims must be finalized before launch.</small></footer></div>
+  if(page==='dashboard')return <div className={'appdash'+(menuOpen?'':' menuClosed')}><div className={'drawerBackdrop'+(menuOpen?' open':'')} onClick={()=>setMenuOpen(false)}/><SideNav open={menuOpen} onClose={()=>setMenuOpen(false)} onNavigate={(p)=>{setPage(p);if(typeof window!=='undefined'&&window.innerWidth<=650)setMenuOpen(false)}}/><main className="dashmain">{toast&&<div className="dashtoast">{toast}</div>}<div className="dashTopbar"><button className="hamburger" onClick={()=>setMenuOpen(!menuOpen)} aria-label="Open menu"><Menu/></button><Brand/></div><div className="dashhead"><div><small>USER DASHBOARD</small><h1>{activeTab}</h1></div><div className="userpill"><span className="statusdot"/>{session?.user?.email||'Preview User'}</div></div>{activeTab==='Overview'?<><div className="stats">{[['Available balance','$0.00',Wallet],['Pending deposits','$0.00',Activity],['Active plans','0',Package],['Team members','0',Users]].map(([t,v,I])=><div className="stat" key={t}><I/><small>{t}</small><b>{v}</b></div>)}</div><div className="welcome"><div><small>YOUR CLOUDMINT SPACE</small><h2>Grow your journey, one step at a time.</h2><p>Account activity and package information at a glance.</p></div><Brand/></div><div className="dashsection"><div className="sectiontitle"><h2>Mining plans</h2><span>120-day plan duration</span></div><div className="plangrid">{livePlans.slice(0,3).map(p=><div className={`plan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Illustrative daily rate: {p.rate}</small><small>Duration: {p.dur||120} days</small><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View plan</Button></div>)}</div></div><div className="dashsection"><div className="sectiontitle"><h2>Important</h2></div><div className="infoCard"><ShieldCheck/><div><b>Transparent account records</b><p>This preview does not accept deposits, promise returns, or process withdrawals. Connect a compliant payment provider and server-side transaction ledger before launch.</p></div></div></div></>:TabBody()}</main></div>;
+  return <div className="site"><header className="topbar"><button className="mobilemenu" onClick={()=>setMobileMenu(!mobileMenu)} aria-label="Menu">{mobileMenu?<X/>:<Menu/>}</button><a onClick={()=>setPage('home')}><Brand/></a><nav className={mobileMenu?'open':''}><a href="#about" onClick={()=>setMobileMenu(false)}>About</a><a href="#how" onClick={()=>setMobileMenu(false)}>How it works</a><a href="#packages" onClick={()=>setMobileMenu(false)}>Packages</a><a href="#rewards" onClick={()=>setMobileMenu(false)}>Rewards</a><a href="#contact" onClick={()=>setMobileMenu(false)}>Contact</a><div className="navbtns"><Button kind="outline" onClick={()=>{setMobileMenu(false);goAuth('login')}}>Login</Button><Button onClick={()=>{setMobileMenu(false);goAuth('register-otp')}}>Register <ArrowRight size={15}/></Button><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/>WhatsApp</a><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/>Telegram</a></div></nav></header><section className="hero"><div className="hero-copy"><div className="eyebrow"><Zap size={14}/> CLOUDMINT PLATFORM</div><h1>Turn your crypto<br/>into <em>new possibilities.</em></h1><p>A modern platform concept for exploring packages, account tools and transparent activity records.</p><div className="heroactions"><Button onClick={()=>goAuth('register-otp')}>Get Started <ArrowRight size={17}/></Button><Button kind="outline" onClick={()=>goAuth('login')}>Login</Button><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/>WhatsApp</a><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/>Telegram</a></div><div className="trustrow"><span><ShieldCheck/> Security-minded</span><span><Zap/> Simple onboarding</span><span><Users/> Community tools</span></div></div><div className="heroart"><div className="artglow"></div><div className="cloudcoin"><Cloud size={190}/><div className="pick">⛏</div><div className="coin">₿</div><div className="circuit">━━━<br/>━━━<br/>━━━</div></div><div className="orbit"></div><div className="orbit orbit2"></div><div className="floatcoin c1">₿</div><div className="floatcoin c2">₿</div><div className="handnote">Mine · Grow · Earn</div></div></section><section className="metricbar"><div><Users/><b>Member tools</b><small>Account dashboard</small></div><div><Wallet/><b>Clear records</b><small>Transaction history</small></div><div><ShieldCheck/><b>Security first</b><small>Verified access</small></div><div><ChartNoAxesCombined/><b>Plan overview</b><small>See plan details</small></div></section><section className="section" id="about"><div className="sectionhead"><small>WHY CLOUDMINT</small><h2>A clear path from sign-up to dashboard</h2><p>Explore the platform design before creating an account.</p></div><div className="steps" id="how">{[['01','Create account','Register with your email and verify the one-time code.'],['02','Review details','Read package terms and funding instructions before taking action.'],['03','Track activity','See account records and plan status in your dashboard.'],['04','Get support','Use the official support and community links for help.']].map(([n,t,d])=><div className="step" key={n}><span>{n}</span><h3>{t}</h3><p>{d}</p></div>)}</div></section><section className="section packages" id="packages"><div className="sectionhead"><small>PACKAGE OVERVIEW</small><h2>Explore the plan designs</h2><p>All displayed prices and rates are illustrative placeholders, not a promise or offer of returns.</p></div><div className="publicplans">{livePlans.map(p=><div className={`publicplan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Illustrative rate: {p.rate}</small><small>Displayed duration: {p.dur||120} days</small><Button onClick={()=>goAuth('login')}>Get Started <ArrowRight size={15}/></Button><p className="tiny">Login or register to continue.</p></div>)}</div></section><section className="section featurestrip" id="rewards"><div className="featurebox"><Gift/><h3>Rewards</h3><p>Reward thresholds and eligibility are displayed transparently after rules are configured.</p><a onClick={()=>goAuth('register-otp')}>Create account →</a></div><div className="featurebox"><Users/><h3>Team tools</h3><p>Referral tracking is planned; commissions must follow published and compliant rules.</p><a onClick={()=>goAuth('register-otp')}>Get started →</a></div><div className="featurebox"><CalendarDays/><h3>Monthly salary</h3><p>Coming Soon</p><span className="tag">COMING SOON</span></div><div className="featurebox"><ShieldCheck/><h3>Secure by design</h3><p>Use email verification and server-side authorization for account protection.</p><span className="tag green">SECURITY FIRST</span></div></section><footer id="contact"><Brand/><div className="footlinks"><a href="#about">About</a><a href="#packages">Packages</a><a onClick={()=>goAuth('login')}>Login</a><a onClick={()=>goAuth('register-otp')}>Register</a></div><div className="community"><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/>WhatsApp</a><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/>Telegram</a></div><small>© 2026 CloudMint. Preview build. Terms, privacy and product claims must be finalized before launch.</small></footer></div>
 }
 createRoot(document.getElementById('root')).render(<App/>);
