@@ -329,7 +329,7 @@ function AIMachinePlan({plan}){
     <small className="aimachine-cycle-label">{!t0?'24-HOUR CYCLE':done?'CYCLE COMPLETE':'CYCLE RUNNING'}</small>
     <div className="aimachine-meta">
       <div><small>Price</small><b>${plan.price}</b></div>
-      <div><small>Illustrative rate</small><b>{plan.rate}</b></div>
+      <div><small>Daily (illustrative)</small><b>{isNaN(Number(plan.price))?'—':(Number(plan.price)/120).toFixed(2)+'%'}</b></div>
       <div><small>Duration</small><b>{plan.dur||120} days</b></div>
     </div>
     {!t0?<Button onClick={start}>Start 24h cycle</Button>
