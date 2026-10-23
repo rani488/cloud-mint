@@ -24,22 +24,41 @@ function AdminPanel(){
   const [tab,setTab]=useState('users');
   const [users,setUsers]=useState([]);
   const [packs,setPacks]=useState([]);
+  const [deps,setDeps]=useState([]);
+  const [wds,setWds]=useState([]);
+  const [addrs,setAddrs]=useState({deposit_tron:'',deposit_bnb:''});
+  const [saving,setSaving]=useState(false);
+  const [amsg,setAmsg]=useState('');
   const [loading,setLoading]=useState(true);
   useEffect(()=>{
     let cancelled=false;
     (async()=>{
       setLoading(true);
       try{
-        const [u,p]=await Promise.all([
+        const [u,p,d,w,s]=await Promise.all([
           supabase.from('profiles').select('email,username,display_name,role,created_at').order('created_at',{ascending:false}),
-          supabase.from('packages').select('*').order('price',{ascending:true})
+          supabase.from('packages').select('*').order('price',{ascending:true}),
+          supabase.from('deposit_requests').select('*').order('created_at',{ascending:false}).limit(100),
+          supabase.from('withdrawal_requests').select('*').order('created_at',{ascending:false}).limit(100),
+          supabase.from('site_settings').select('*')
         ]);
-        if(!cancelled){ setUsers(u.data||[]); setPacks(p.data||[]); }
+        if(!cancelled){
+          setUsers(u.data||[]); setPacks(p.data||[]); setDeps(d.data||[]); setWds(w.data||[]);
+          const m={deposit_tron:'',deposit_bnb:''};(s.data||[]).forEach(r=>{m[r.key]=r.value||''});setAddrs(m);
+        }
       }catch{ if(!cancelled){ setUsers([]); setPacks([]); } }
       if(!cancelled) setLoading(false);
     })();
     return ()=>{cancelled=true};
   },[]);
+  async function saveAddrs(e){
+    e.preventDefault(); setSaving(true); setAmsg('');
+    try{
+      const {error}=await supabase.from('site_settings').upsert([{key:'deposit_tron',value:addrs.deposit_tron.trim()},{key:'deposit_bnb',value:addrs.deposit_bnb.trim()}],{onConflict:'key'});
+      if(error)throw error;
+      setAmsg('Deposit addresses saved and live on the Deposit page.');
+    }catch(err){setAmsg(err.message||'Could not save.')}finally{setSaving(false)}
+  }
   return <div className="dashsection">
     <div className="sectiontitle"><h2>Admin Panel</h2><span>restricted access</span></div>
     <div className="heroactions" style={{margin:'0 0 18px'}}>
@@ -67,7 +86,7 @@ function AdminPanel(){
 }
 
 function App(){
-  const [page,setPage]=useState('home');
+  const [page,setPage]=useState(()=>{try{return localStorage.getItem('cm_page')||'home'}catch{return 'home'}});
   const [authMode,setAuthMode]=useState('login');
   const [email,setEmail]=useState('');
   const [otp,setOtp]=useState('');
@@ -80,7 +99,10 @@ function App(){
   const [busy,setBusy]=useState(false);
   const [session,setSession]=useState(null);
   const [mobileMenu,setMobileMenu]=useState(false);
-  const [activeTab,setActiveTab]=useState('Overview');
+  const [activeTab,setActiveTab]=useState(()=>{try{return localStorage.getItem('cm_tab')||'Overview'}catch{return 'Overview'}});
+  const [authReady,setAuthReady]=useState(false);
+  useEffect(()=>{try{localStorage.setItem('cm_page',page)}catch{}},[page]);
+  useEffect(()=>{try{localStorage.setItem('cm_tab',activeTab)}catch{}},[activeTab]);
   const [depositAmount,setDepositAmount]=useState('50');
   const [balance,setBalance]=useState(0);
   const [mining,setMining]=useState([]);
@@ -89,19 +111,55 @@ function App(){
   const [roleChecked,setRoleChecked]=useState(false);
   const [adminMode,setAdminMode]=useState('login');
   const [menuOpen,setMenuOpen]=useState(typeof window!=='undefined'?window.innerWidth>650:true);
+  const [profile,setProfile]=useState(null);
+  const [deposits,setDeposits]=useState([]);
+  const [withdrawals,setWithdrawals]=useState([]);
+  const [siteAddrs,setSiteAddrs]=useState({TRON:'',BNB:''});
+  const [depChain,setDepChain]=useState('TRON');
+  const [depAmount,setDepAmount]=useState('');
+  const [depTx,setDepTx]=useState('');
+  const [wdChain,setWdChain]=useState('TRON');
+  const [wdAmount,setWdAmount]=useState('');
+  const [wdAddr,setWdAddr]=useState('');
+  const [editName,setEditName]=useState('');
+  const [toast,setToast]=useState('');
+  const [simOn,setSimOn]=useState(false);
+  const [simPct,setSimPct]=useState(0);
+  const CHAINS=[{id:'TRON',name:'Tron',token:'USDT · TRC20'},{id:'BNB',name:'BNB Smart Chain',token:'USDT · BEP20'}];
   const [recovering,setRecovering]=useState(false);
   const [newPass,setNewPass]=useState('');
   const configured=Boolean(supabase);
   const isAdminPath=typeof window!=='undefined'&&window.location.pathname.replace(/\/+$/,'')==='/admin';
   const goAuth=(mode='login')=>{setAuthMode(mode);setNotice('');setRecovering(false);setPage('auth');window.scrollTo(0,0)};
   useEffect(()=>{
-    if(!supabase) return;
-    supabase.auth.getSession().then(({data})=>setSession(data.session));
+    if(!supabase){setAuthReady(true);return}
+    (async()=>{
+      try{
+        const last=parseInt(localStorage.getItem('cm_last_active')||'0',10);
+        if(last&&Date.now()-last>24*3600*1000){
+          await supabase.auth.signOut();
+          try{localStorage.removeItem('cm_last_active');localStorage.setItem('cm_page','home')}catch{}
+          setPage('home');
+        }
+      }catch{}
+      try{localStorage.setItem('cm_last_active',String(Date.now()))}catch{}
+      const {data}=await supabase.auth.getSession();
+      setSession(data.session);
+      if(!data.session) setPage(p=>(p==='dashboard'||p==='auth')?'home':p);
+      setAuthReady(true);
+    })();
     const {data:{subscription}}=supabase.auth.onAuthStateChange((event,s)=>{
       if(event==='PASSWORD_RECOVERY'){ setRecovering(true); setPage('auth'); window.scrollTo(0,0); }
+      if(event==='SIGNED_OUT'){ try{localStorage.removeItem('cm_last_active')}catch{} }
       setSession(s);
     });
     return ()=>subscription.unsubscribe();
+  },[]);
+  useEffect(()=>{
+    const bump=()=>{try{const last=parseInt(localStorage.getItem('cm_last_active')||'0',10);if(Date.now()-last>5*60*1000)localStorage.setItem('cm_last_active',String(Date.now()))}catch{}};
+    window.addEventListener('pointerdown',bump);window.addEventListener('keydown',bump);
+    const iv=setInterval(bump,5*60*1000);
+    return ()=>{window.removeEventListener('pointerdown',bump);window.removeEventListener('keydown',bump);clearInterval(iv)};
   },[]);
   useEffect(()=>{if(session && page==='auth' && !recovering)setPage('dashboard')},[session,page,recovering]);
   useEffect(()=>{
@@ -116,6 +174,63 @@ function App(){
     return ()=>{cancelled=true};
   },[session]);
   useEffect(()=>{ if(isAdminPath) setEmail('miamiqueens11@gmail.com'); },[]);
+  useEffect(()=>{ if(!toast)return; const t=setTimeout(()=>setToast(''),3200); return ()=>clearTimeout(t); },[toast]);
+  useEffect(()=>{
+    let cancelled=false;
+    (async()=>{
+      if(!supabase||!session?.user)return;
+      try{
+        const uid=session.user.id;
+        const [pr,d,w,s]=await Promise.all([
+          supabase.from('profiles').select('*').eq('id',uid).single(),
+          supabase.from('deposit_requests').select('*').eq('user_id',uid).order('created_at',{ascending:false}),
+          supabase.from('withdrawal_requests').select('*').eq('user_id',uid).order('created_at',{ascending:false}),
+          supabase.from('site_settings').select('*')
+        ]);
+        if(cancelled)return;
+        if(pr.data){setProfile(pr.data);setEditName(pr.data.display_name||'')}
+        setDeposits(d.data||[]);setWithdrawals(w.data||[]);
+        const m={TRON:'',BNB:''};(s.data||[]).forEach(r=>{if(r.key==='deposit_tron')m.TRON=r.value||'';if(r.key==='deposit_bnb')m.BNB=r.value||''});setSiteAddrs(m);
+      }catch{/* keep defaults */}
+    })();
+    return ()=>{cancelled=true};
+  },[session]);
+  useEffect(()=>{ if(!simOn)return; if(simPct>=100){setSimOn(false);return;} const t=setTimeout(()=>setSimPct(p=>Math.min(100,p+4)),150); return ()=>clearTimeout(t); },[simOn,simPct]);
+  const copyText=async(t,label)=>{ try{await navigator.clipboard.writeText(t);setToast((label||'Copied')+' to clipboard.')}catch{setToast('Copy failed — long-press the text to copy.')} };
+  async function submitDeposit(e){
+    e.preventDefault(); if(!supabase||!session?.user)return;
+    const amt=parseFloat(depAmount); if(!(amt>0)){setToast('Enter a valid USD amount.');return}
+    setBusy(true);
+    try{
+      const {error}=await supabase.from('deposit_requests').insert({user_id:session.user.id,email:session.user.email,chain:depChain,amount_usd:amt,tx_hash:depTx.trim()||null});
+      if(error)throw error;
+      setDepAmount('');setDepTx('');setToast('Deposit request submitted — pending manual review.');
+      const {data}=await supabase.from('deposit_requests').select('*').eq('user_id',session.user.id).order('created_at',{ascending:false});
+      setDeposits(data||[]);
+    }catch(err){setToast(err.message||'Could not submit deposit.')}finally{setBusy(false)}
+  }
+  async function submitWithdraw(e){
+    e.preventDefault(); if(!supabase||!session?.user)return;
+    const amt=parseFloat(wdAmount); if(!(amt>0)){setToast('Enter a valid USD amount.');return}
+    if(!wdAddr.trim()){setToast('Enter your wallet address.');return}
+    setBusy(true);
+    try{
+      const {error}=await supabase.from('withdrawal_requests').insert({user_id:session.user.id,email:session.user.email,chain:wdChain,amount_usd:amt,wallet_address:wdAddr.trim()});
+      if(error)throw error;
+      setWdAmount('');setWdAddr('');setToast('Withdrawal request submitted — pending manual review.');
+      const {data}=await supabase.from('withdrawal_requests').select('*').eq('user_id',session.user.id).order('created_at',{ascending:false});
+      setWithdrawals(data||[]);
+    }catch(err){setToast(err.message||'Could not submit withdrawal.')}finally{setBusy(false)}
+  }
+  async function saveDisplayName(e){
+    e.preventDefault(); if(!supabase||!session?.user)return;
+    setBusy(true);
+    try{
+      const {error}=await supabase.from('profiles').update({display_name:editName.trim()}).eq('id',session.user.id);
+      if(error)throw error;
+      setProfile({...profile,display_name:editName.trim()});setToast('Profile updated.');
+    }catch(err){setToast(err.message||'Could not update profile.')}finally{setBusy(false)}
+  }
   const signOut=async()=>{if(supabase)await supabase.auth.signOut();setSession(null);setAdmin(false);setRole('user');setRoleChecked(false);setRecovering(false);setAdminMode('login');setPage('home')};
   async function sendOtp(e){
     e?.preventDefault();setNotice('');
@@ -266,6 +381,7 @@ function App(){
     return <form onSubmit={passwordLogin} className="authform"><h2>Welcome back</h2><p className="muted">Log in to your CloudMint account.</p><label>Email address</label><div className="inputwrap"><Mail/><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" required/></div><label>Password</label><div className="inputwrap"><LockKeyhole/><input type={showPass?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="Your password" required/><button type="button" className="iconbtn" onClick={()=>setShowPass(!showPass)}>{showPass?<EyeOff/>:<Eye/>}</button></div><div className="authlinks"><a onClick={()=>goAuth('forgot')}>Forgot password?</a><a onClick={()=>goAuth('register-otp')}>Register with email OTP</a></div><Button>Login securely</Button><p className="switch">New to CloudMint? <a onClick={()=>goAuth('register-otp')}>Create account</a></p></form>
   };
   const authVisual=<div className="authvisual"><div className="orb"><Cloud size={90}/><span>₿</span></div><h1>Welcome to <em>CloudMint</em></h1><p>Mine · Grow · Earn</p><div className="feature"><ShieldCheck/> Secure authentication</div><div className="feature"><Mail/> Email verification</div><div className="feature"><LockKeyhole/> Protected account access</div></div>;
+  if(!authReady&&!isAdminPath)return <div className="authpage"><header className="topbar"><Brand/></header><div className="authstage"><div className="authcard"><p className="muted">Loading your session…</p></div></div></div>;
   if(recovering)return <div className="authpage"><header className="topbar"><Brand/></header><div className="authstage">{authVisual}<div className="authcard"><form onSubmit={setNewPassword} className="authform"><h2>Set a new password</h2><p className="muted">Choose a new password for your account.</p><label>New password</label><div className="inputwrap"><KeyRound/><input type={showPass?'text':'password'} value={newPass} onChange={e=>setNewPass(e.target.value)} minLength="8" required placeholder="At least 8 characters"/><button type="button" className="iconbtn" onClick={()=>setShowPass(!showPass)}>{showPass?<EyeOff/>:<Eye/>}</button></div><Button disabled={busy}>{busy?'Saving…':'Update password'}</Button></form>{notice&&<div className="notice"><AlertTriangle size={16}/>{notice}</div>}</div></div></div>;
   if(page==='auth')return <div className="authpage"><header className="topbar"><a onClick={()=>setPage('home')}><Brand/></a><a className="navlink" onClick={()=>setPage('home')}>Back to home</a></header><div className="authstage">{authVisual}<div className="authcard">{authContent()}{notice&&<div className="notice"><AlertTriangle size={16}/>{notice}</div>}{!configured&&<p className="tiny">UI preview mode — auth becomes active after Supabase setup.</p>}</div></div></div>;
   if(isAdminPath){
