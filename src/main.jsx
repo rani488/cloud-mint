@@ -128,14 +128,22 @@ function App(){
       setAuthMode('verify');
     }catch(err){setNotice(err.message||'Could not send code. Check Supabase email settings.')}finally{setBusy(false)}
   }
+  async function verifyOtpCode(mail,code){
+    let lastErr=null;
+    for(const t of ['email','signup']){
+      const {data,error}=await supabase.auth.verifyOtp({email:mail.trim(),token:code,type:t});
+      if(!error)return data;
+      lastErr=error;
+    }
+    throw lastErr;
+  }
   async function verifyOtp(e){
     e.preventDefault();setNotice('');
     if(!configured){setNotice('Demo preview only. Configure Supabase to verify email codes.');return}
     if(!/^[0-9]{6,8}$/.test(otp)){setNotice('Enter the 6–8 digit code from your email.');return}
     setBusy(true);
     try{
-      const {data,error}=await supabase.auth.verifyOtp({email:email.trim(),token:otp,type:'email'});
-      if(error)throw error;
+      const data=await verifyOtpCode(email,otp);
       if(data.user){
         await supabase.from('profiles').upsert({id:data.user.id,email:email.trim(),username:username||email.split('@')[0],display_name:profileName||username||email.split('@')[0]},{onConflict:'id'});
       }
@@ -224,8 +232,7 @@ function App(){
     if(!/^[0-9]{6,8}$/.test(otp)){setNotice('Enter the 6–8 digit code from your email.');return}
     setBusy(true);
     try{
-      const {data,error}=await supabase.auth.verifyOtp({email:email.trim(),token:otp,type:'email'});
-      if(error)throw error;
+      const data=await verifyOtpCode(email,otp);
       setAdminMode('newpass');setNotice('Code verified. Set a new password below.');
     }catch(err){setNotice(err.message||'Code verification failed.')}finally{setBusy(false)}
   }
