@@ -108,3 +108,31 @@
 .mrow input:focus,.mrow select:focus{border-color:#05bce9}
 .mrow .btn{padding:8px 12px;font-size:11px}
 .stackform select{width:100%;border:1px solid #1a4165;border-radius:10px;padding:13px;background:#020c19;color:#fff;font-size:13px;outline:0}
+
+@media(max-width:650px){
+.hero{padding-bottom:20px}
+.hero h1{font-size:36px;margin:14px 0}
+.hero-copy>p{font-size:13px;line-height:1.65}
+.heroactions{margin:14px 0 10px}
+.heroactions .btn{padding:11px 16px;font-size:12px}
+.trustrow{margin-top:18px}
+.metricbar>div{padding:12px 8px}
+.metricbar svg{width:22px;height:22px}
+.metricbar b{font-size:12px}
+.metricbar small{font-size:10px}
+.section{padding-top:30px;padding-bottom:30px}
+.sectionhead{margin:0 auto 20px}
+.sectionhead h2{font-size:21px}
+.sectionhead p{font-size:12px}
+.step{padding:16px}
+.step span{width:32px;height:32px;font-size:14px}
+.step h3{font-size:13px;margin:12px 0 6px}
+.step p{font-size:11px}
+.publicplan h3{font-size:13px}
+.publicplan .price{font-size:24px}
+.publicplan small{font-size:10px}
+.featurebox{padding:13px}
+.featurebox h3{font-size:13px;margin:10px 0 6px}
+.featurebox p{font-size:10px;min-height:0}
+footer{padding:22px 6.5%}
+}
