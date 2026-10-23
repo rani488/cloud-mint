@@ -303,6 +303,42 @@ function PackageManager({packs,setPacks}){
   </div>;
 }
 
+function AIMachinePlan({plan}){
+  const CYCLE=86400000, R=88, CIRC=2*Math.PI*R;
+  const [now,setNow]=useState(()=>Date.now());
+  const [t0,setT0]=useState(()=>{try{const s=JSON.parse(localStorage.getItem('cm_cycle')||'null');if(s&&s.plan===plan.name&&s.t0)return s.t0;}catch{}return 0;});
+  useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),1000);return ()=>clearInterval(t);},[]);
+  const elapsed=t0?now-t0:0, done=t0&&elapsed>=CYCLE, prog=t0?Math.min(1,elapsed/CYCLE):0;
+  const rem=Math.max(0,CYCLE-elapsed);
+  const hh=String(Math.floor(rem/3600000)).padStart(2,'0'),mm=String(Math.floor(rem%3600000/60000)).padStart(2,'0'),ss=String(Math.floor(rem%60000/1000)).padStart(2,'0');
+  const start=()=>{const t=Date.now();setT0(t);setNow(t);try{localStorage.setItem('cm_cycle',JSON.stringify({plan:plan.name,t0:t}));}catch{}};
+  return <div className="aimachine">
+    <div className="aimachine-glow"/>
+    <div className="aimachine-head"><small>ACTIVE PLAN</small><h2>{plan.name} Plan</h2><span className="badge approved">active</span></div>
+    <div className="aimachine-core">
+      <svg className="aimachine-ring" viewBox="0 0 200 200">
+        <defs><linearGradient id="aigrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#53f6c8"/><stop offset="1" stopColor="#22d3ee"/></linearGradient></defs>
+        <circle cx="100" cy="100" r={R} className="aimachine-track"/>
+        <circle cx="100" cy="100" r={R} className="aimachine-progress" strokeDasharray={CIRC} strokeDashoffset={CIRC*(1-prog)}/>
+      </svg>
+      <div className="aimachine-orbit o1"/><div className="aimachine-orbit o2"/>
+      <div className="aimachine-orb"><span>{plan.icon||'◆'}</span></div>
+      <div className="aimachine-pdot p1"/><div className="aimachine-pdot p2"/><div className="aimachine-pdot p3"/>
+    </div>
+    <div className="aimachine-count">{done?'00:00:00':hh+':'+mm+':'+ss}</div>
+    <small className="aimachine-cycle-label">{!t0?'24-HOUR CYCLE':done?'CYCLE COMPLETE':'CYCLE RUNNING'}</small>
+    <div className="aimachine-meta">
+      <div><small>Price</small><b>${plan.price}</b></div>
+      <div><small>Illustrative rate</small><b>{plan.rate}</b></div>
+      <div><small>Duration</small><b>{plan.dur||120} days</b></div>
+    </div>
+    {!t0?<Button onClick={start}>Start 24h cycle</Button>
+    :done?<><p className="muted">Cycle complete — nothing was earned or credited.</p><Button kind="outline" onClick={start}>Restart cycle</Button></>
+    :<p className="muted">Cycle ends in {hh}:{mm}:{ss} — visual tracker only.</p>}
+    <p className="tiny" style={{marginTop:12}}>Visual cycle tracker — this timer does not mine, earn, or credit anything.</p>
+  </div>;
+}
+
 function App(){
   const [page,setPage]=useState(()=>{try{return localStorage.getItem('cm_page')||'home'}catch{return 'home'}});
   const [authMode,setAuthMode]=useState('login');
@@ -538,7 +574,7 @@ function App(){
     </div>;
     if(activeTab==='My Plans')return <div className="tabwrap">
       <div className="sectiontitle"><h2>My Plans</h2></div>
-      {profile?.active_plan?<><div className="plangrid" style={{marginTop:0}}>{livePlans.filter(p=>p.name===profile.active_plan).map(p=><div className={`plan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Illustrative daily rate: {p.rate}</small><small>Duration: {p.dur||120} days</small><span className="badge approved">active</span></div>)}</div><div className="infoCard" style={{marginTop:14}}><ShieldCheck/><div><b>Plan on record: {profile.active_plan}</b><p>Recorded by the admin after manual review of your deposit. This site does not credit earnings automatically — mining displays are visual simulations only.</p></div></div></>
+      {profile?.active_plan?<AIMachinePlan plan={livePlans.find(p=>p.name===profile.active_plan)||{name:profile.active_plan,price:'—',rate:'—',dur:120,tone:'cyan',icon:'◆'}}/>
       :<div className="placeholder" style={{marginTop:0}}><div className="bigicon"><Package size={36}/></div><h2>No active plans</h2><p>You don't have any active plans yet. Plans are activated manually after your deposit request is reviewed.</p><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View packages</Button></div>}
     </div>;
     if(activeTab==='Mining cycles')return <div className="tabwrap">

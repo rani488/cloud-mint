@@ -137,3 +137,30 @@
 .featurebox p{font-size:10px;min-height:0}
 footer{padding:22px 6.5%}
 }
+
+/* AI machine plan card */
+.aimachine{position:relative;overflow:hidden;border-radius:22px;padding:28px 20px 24px;background:linear-gradient(160deg,#0a1828,#060b16 70%);border:1px solid #1c3a5e;text-align:center}
+.aimachine-glow{position:absolute;inset:-45%;background:conic-gradient(from 0deg,transparent,rgba(14,74,110,.55),transparent 32%);animation:spinb 7s linear infinite;pointer-events:none}
+.aimachine-head{position:relative;margin-bottom:4px}
+.aimachine-head small{letter-spacing:4px;color:#53f6c8;font-size:10px;font-weight:700}
+.aimachine-head h2{margin:8px 0 10px;font-size:28px}
+.aimachine-core{position:relative;width:224px;height:224px;margin:16px auto 10px}
+.aimachine-ring{position:absolute;inset:0;transform:rotate(-90deg)}
+.aimachine-track{fill:none;stroke:#12283f;stroke-width:10}
+.aimachine-progress{fill:none;stroke:url(#aigrad);stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset 1s linear;filter:drop-shadow(0 0 7px rgba(34,211,238,.8))}
+.aimachine-orbit{position:absolute;border-radius:50%;pointer-events:none}
+.aimachine-orbit.o1{inset:20px;border:1px dashed rgba(83,246,200,.28);animation:aimspin 16s linear infinite}
+.aimachine-orbit.o2{inset:36px;border:1px dashed rgba(34,211,238,.16);animation:aimspin 26s linear infinite reverse}
+.aimachine-orb{position:absolute;inset:66px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#a5f3fc,#22d3ee 45%,#0c2a4a 85%);display:flex;align-items:center;justify-content:center;font-size:46px;color:#04222e;animation:aimpulse 2.8s ease-in-out infinite;box-shadow:0 0 46px rgba(34,211,238,.5),inset 0 0 24px rgba(255,255,255,.25)}
+.aimachine-pdot{position:absolute;width:7px;height:7px;border-radius:50%;background:#67e8f9;box-shadow:0 0 10px #22d3ee;pointer-events:none;animation:aimfloat 4s ease-in-out infinite}
+.aimachine-pdot.p1{top:16%;left:12%}
+.aimachine-pdot.p2{top:64%;right:10%;animation-delay:1.3s}
+.aimachine-pdot.p3{bottom:8%;left:30%;animation-delay:2.4s}
+.aimachine-count{position:relative;font-size:24px;font-weight:800;letter-spacing:3px;color:#eaf4ff;text-shadow:0 0 18px rgba(34,211,238,.5)}
+.aimachine-cycle-label{position:relative;display:block;margin-top:6px;letter-spacing:3px;font-size:10px;color:#53f6c8;font-weight:700}
+.aimachine-meta{position:relative;display:flex;justify-content:center;gap:30px;margin:18px 0}
+.aimachine-meta small{display:block;color:#9db5d0;font-size:10px;letter-spacing:1.5px;margin-bottom:4px}
+.aimachine-meta b{font-size:17px}
+@keyframes aimspin{to{transform:rotate(360deg)}}
+@keyframes aimpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+@keyframes aimfloat{0%,100%{transform:translateY(0);opacity:.9}50%{transform:translateY(-12px);opacity:.4}}
