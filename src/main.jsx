@@ -104,12 +104,8 @@ function AdminPanel({tab,setTab}){
   async function removeUser(u){
     try{
       setAmsg('');
-      const e1=await supabase.from('withdrawal_requests').delete().eq('user_id',u.id);
-      if(e1.error)throw e1.error;
-      const e2=await supabase.from('deposit_requests').delete().eq('user_id',u.id);
-      if(e2.error)throw e2.error;
-      const e3=await supabase.from('profiles').delete().eq('id',u.id);
-      if(e3.error)throw e3.error;
+      const {error}=await supabase.rpc('admin_delete_user',{target_id:u.id});
+      if(error)throw error;
       setUsers(users.filter(x=>x.id!==u.id));
       setDeps(deps.filter(d=>d.user_id!==u.id));
       setWds(wds.filter(w=>w.user_id!==u.id));
