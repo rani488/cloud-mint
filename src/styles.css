@@ -322,3 +322,12 @@ table th{color:#fbbf24}
 .txlist .txrow{background:linear-gradient(135deg,#2e1065,#7c3aed);border-color:#ffffff22;border-radius:14px}
 .txlist .txrow small{color:#ffffffcc}
 .txlist .txrow .rwd{color:#fbbf24}
+/* Packages page: full multi panel + compact cards (2 per row, 3 rows on phone) */
+.plangrid{background:linear-gradient(160deg,#5b21b6,#a626a4 38%,#e84393 68%,#f97316);border-radius:22px;padding:16px}
+.plangrid .plan{padding:12px 10px;gap:6px}
+.plangrid .plan .planicon{width:36px;height:36px;border-radius:10px;font-size:22px}
+.plangrid .plan h3{font-size:13px}
+.plangrid .plan .price{font-size:20px}
+.plangrid .plan small{font-size:10px}
+.plangrid .plan .btn{padding:8px 6px;font-size:11px;margin-top:4px}
+@media(max-width:650px){.plangrid{grid-template-columns:repeat(2,1fr);gap:10px;padding:12px}}
