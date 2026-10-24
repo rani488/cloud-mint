@@ -320,6 +320,37 @@ function AIMachinePlan({plan,since}){
   const termDone=dayN>dur;
   const setRate=parseFloat(plan.rate);
   const dailyAmt=(!isNaN(setRate)&&!isNaN(Number(plan.price)))?(Number(plan.price)*setRate/100).toFixed(2):null;
+  useEffect(() => {
+  if (!done || !t0 || dailyAmt === null) return;
+
+  const cycleId = `${plan.name}:${t0}`;
+
+  try {
+    const credited = JSON.parse(
+      localStorage.getItem('cm_credited_cycles') || '[]'
+    );
+
+    if (credited.includes(cycleId)) return;
+
+    const current = Number(
+      localStorage.getItem('cm_mining_earnings') || '0'
+    );
+
+    localStorage.setItem(
+      'cm_mining_earnings',
+      (current + Number(dailyAmt)).toFixed(2)
+    );
+
+    localStorage.setItem(
+      'cm_credited_cycles',
+      JSON.stringify([...credited, cycleId])
+    );
+
+    window.dispatchEvent(new Event('cm_balance_updated'));
+  } catch (error) {
+    console.error('Mining earning update failed:', error);
+  }
+}, [done, t0, dailyAmt, plan.name]);
   const net=useMemo(()=>{let sd=7;const rnd=()=>{sd=(sd*1664525+1013904223)>>>0;return sd/4294967296;};
     const pts=[],N=26,RR=56;
     for(let i=0;i<N;i++){const a=rnd()*Math.PI*2,r=RR*Math.sqrt(rnd());pts.push({x:120+r*Math.cos(a),y:120+r*Math.sin(a),d:(rnd()*2.6).toFixed(2),r:(1.8+rnd()*1.7).toFixed(1)});}
