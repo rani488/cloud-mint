@@ -46,6 +46,8 @@ function AdminPanel({tab,setTab}){
   const [saving,setSaving]=useState(false);
   const [amsg,setAmsg]=useState('');
   const [loading,setLoading]=useState(true);
+  const [openDet,setOpenDet]=useState(null);
+  const [confirmRm,setConfirmRm]=useState(null);
   useEffect(()=>{
     let cancelled=false;
     (async()=>{
@@ -99,6 +101,21 @@ function AdminPanel({tab,setTab}){
       setUsers(users.map(x=>x.email===u.email?{...x,...patch}:x));
     }catch(err){setAmsg(err.message||'Could not update plan. (Run the admin-update SQL first.)')}
   }
+  async function removeUser(u){
+    try{
+      setAmsg('');
+      const e1=await supabase.from('withdrawal_requests').delete().eq('user_id',u.id);
+      if(e1.error)throw e1.error;
+      const e2=await supabase.from('deposit_requests').delete().eq('user_id',u.id);
+      if(e2.error)throw e2.error;
+      const e3=await supabase.from('profiles').delete().eq('id',u.id);
+      if(e3.error)throw e3.error;
+      setUsers(users.filter(x=>x.id!==u.id));
+      setDeps(deps.filter(d=>d.user_id!==u.id));
+      setWds(wds.filter(w=>w.user_id!==u.id));
+      setAmsg('User removed: '+u.email);
+    }catch(err){setAmsg(err.message||'Could not remove user. (Run the admin-delete SQL first.)')}
+  }
   async function toggleMaintenance(){
     const next=addrs.maintenance_mode==='on'?'off':'on';
     setSaving(true);setAmsg('');
@@ -113,16 +130,28 @@ function AdminPanel({tab,setTab}){
     <div className="sectiontitle"><h2>Admin Panel</h2><span>restricted access</span></div>
     {amsg&&<p className="muted" style={{margin:'0 0 12px'}}>{amsg}</p>}
     {loading?<p className="muted">Loading records…</p>:tab==='users'?<div className="infoCard" style={{display:'block',padding:0,overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
-      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:760}}>
+      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:920}}>
         <thead><tr style={{textAlign:'left',color:'#9db5d0'}}>
-          <th style={{padding:'12px 14px'}}>Email</th><th style={{padding:'12px 14px'}}>Username</th><th style={{padding:'12px 14px'}}>Name</th><th style={{padding:'12px 14px'}}>Role</th><th style={{padding:'12px 14px'}}>Plan</th><th style={{padding:'12px 14px'}}>Joined</th>
+          <th style={{padding:'12px 14px'}}>Email</th><th style={{padding:'12px 14px'}}>Username</th><th style={{padding:'12px 14px'}}>Name</th><th style={{padding:'12px 14px'}}>Role</th><th style={{padding:'12px 14px'}}>Plan</th><th style={{padding:'12px 14px'}}>Joined</th><th style={{padding:'12px 14px'}}>Details</th><th style={{padding:'12px 14px'}}>Remove</th>
         </tr></thead>
-        <tbody>{users.map(u=><tr key={u.email} style={{borderTop:'1px solid #12395c'}}>
+        <tbody>{users.map(u=>{
+          const du=deps.filter(d=>d.user_id===u.id);
+          const wu=wds.filter(w=>w.user_id===u.id);
+          const depT=du.reduce((a,d)=>a+Number(d.amount||0),0);
+          const wdT=wu.reduce((a,w)=>a+Number(w.amount||0),0);
+          const depR=du.filter(d=>d.status==='reviewed').length;
+          const depP=du.filter(d=>d.status==='pending').length;
+          const wdR=wu.filter(w=>w.status==='reviewed').length;
+          const wdP=wu.filter(w=>w.status==='pending').length;
+          const dayN=u.active_plan_since?Math.max(1,Math.floor((Date.now()-new Date(u.active_plan_since).getTime())/86400000)+1):null;
+          return <React.Fragment key={u.email}><tr style={{borderTop:'1px solid #12395c'}}>
           <td style={{padding:'11px 14px'}}>{u.email}</td><td style={{padding:'11px 14px'}}>{u.username||'—'}</td><td style={{padding:'11px 14px'}}>{u.display_name||'—'}</td>
           <td style={{padding:'11px 14px'}}><span className="tag" style={u.role==='admin'?{background:'#06443c',color:'#53f6c8'}:{}}>{u.role||'user'}</span></td>
           <td style={{padding:'11px 14px'}}>{u.active_plan||'—'}</td>
           <td style={{padding:'11px 14px',color:'#9db5d0'}}>{u.created_at?new Date(u.created_at).toLocaleDateString():'—'}</td>
-        </tr>)}{users.length===0&&<tr><td colSpan="6" style={{padding:'16px',color:'#9db5d0'}}>No users found.</td></tr>}</tbody>
+          <td style={{padding:'11px 14px'}}><button onClick={()=>setOpenDet(openDet===u.email?null:u.email)} style={{background:'#0b1e33',color:'#dbe7f5',border:'1px solid #1c3a5e',borderRadius:8,padding:'6px 10px',fontSize:14,lineHeight:1}}>⋮</button></td>
+          <td style={{padding:'11px 14px'}}>{confirmRm===u.email?<button onClick={()=>{setConfirmRm(null);removeUser(u)}} style={{background:'#3d0f14',color:'#ff9aa5',border:'1px solid #7a2430',borderRadius:8,padding:'6px 8px',fontSize:12}}>Confirm?</button>:<button onClick={()=>setConfirmRm(u.email)} style={{background:'#0b1e33',color:'#ff9aa5',border:'1px solid #7a2430',borderRadius:8,padding:'6px 8px',fontSize:12}}>Remove</button>}</td>
+        </tr>{openDet===u.email&&<tr><td colSpan="8" style={{padding:'12px 14px',background:'#081426'}}><div style={{display:'flex',flexWrap:'wrap',gap:'18px',fontSize:12,color:'#dbe7f5'}}><span>Deposits: <b>{'$'+depT.toFixed(2)}</b> <span style={{color:'#9db5d0'}}>({du.length} total · {depR} reviewed · {depP} pending)</span></span><span>Withdrawals: <b>{'$'+wdT.toFixed(2)}</b> <span style={{color:'#9db5d0'}}>({wu.length} total · {wdR} reviewed · {wdP} pending)</span></span><span>Plan: <b>{u.active_plan||'—'}</b></span>{dayN&&<span>Day: <b>{dayN}</b></span>}<span>Joined: <b>{u.created_at?new Date(u.created_at).toLocaleDateString():'—'}</b></span></div></td></tr>}</React.Fragment>})}{users.length===0&&<tr><td colSpan="8" style={{padding:'16px',color:'#9db5d0'}}>No users found.</td></tr>}</tbody>
       </table>
     </div>:tab==='packages'?<PackageManager packs={packs} setPacks={setPacks}/>
     :tab==='deposits'?<div className="infoCard" style={{display:'block',padding:0,overflowX:'auto'}}>
