@@ -327,26 +327,24 @@ function PackageManager({packs,setPacks}){
   </div>;
 }
 
-function AIMachinePlan({plan,since}){
-  const CYCLE=86400000, R=104, CIRC=2*Math.PI*R;
-  const dur=Number(plan.dur)||120;
-  const [now,setNow]=useState(()=>Date.now());
-  const [t0,setT0]=useState(()=>{try{const s=JSON.parse(localStorage.getItem('cm_cycle')||'null');if(s&&s.plan===plan.name&&s.t0)return s.t0;}catch{}return 0;});
-  useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),1000);return ()=>clearInterval(t);},[]);
-  const elapsed=t0?now-t0:0, done=t0&&elapsed>=CYCLE, prog=t0?Math.min(1,elapsed/CYCLE):0;
-  const rem=Math.max(0,CYCLE-elapsed);
-  const hh=String(Math.floor(rem/3600000)).padStart(2,'0'),mm=String(Math.floor(rem%3600000/60000)).padStart(2,'0'),ss=String(Math.floor(rem%60000/1000)).padStart(2,'0');
-  const sinceMs=since?new Date(since).getTime():0;
-  const dayN=sinceMs?Math.max(1,Math.floor((now-sinceMs)/86400000)+1):0;
-  const dayProg=sinceMs?Math.min(1,Math.max(0,(now-sinceMs)/(dur*86400000))):0;
-  const termDone=dayN>dur;
+function AIMachinePlan({plan,runs,onRun}){
+  const R=104, CIRC=2*Math.PI*R;
+  const target=Number(plan.dur)||120;
+  const [busy,setBusy]=useState(false);
+  useEffect(()=>{try{localStorage.removeItem('cm_cycle')}catch{}},[]);
+  const runCount=Number(runs?.count||0);
+  const runProg=Math.min(1,runCount/target);
+  const runDone=runCount>=target;
+  const rateNum=parseFloat(plan.rate);
+  const dailyNum=isNaN(Number(plan.price))||isNaN(rateNum)?NaN:Number((Number(plan.price)*rateNum/100).toFixed(2));
+  const dailyStr=isNaN(dailyNum)?'—':'$'+dailyNum.toFixed(2);
+  const todayDone=!!runs?.todayDone;
   const net=useMemo(()=>{let sd=7;const rnd=()=>{sd=(sd*1664525+1013904223)>>>0;return sd/4294967296;};
     const pts=[],N=26,RR=56;
     for(let i=0;i<N;i++){const a=rnd()*Math.PI*2,r=RR*Math.sqrt(rnd());pts.push({x:120+r*Math.cos(a),y:120+r*Math.sin(a),d:(rnd()*2.6).toFixed(2),r:(1.8+rnd()*1.7).toFixed(1)});}
     const edges=[];
     for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){if(Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y)<50)edges.push([i,j]);}
     return {pts,edges};},[]);
-  const start=()=>{const t=Date.now();setT0(t);setNow(t);try{localStorage.setItem('cm_cycle',JSON.stringify({plan:plan.name,t0:t}));}catch{}};
   return <div className="ncore">
     <div className="ncore-ambient"/>
     <div className="ncore-head"><small>ACTIVE PLAN</small><h2>{plan.name} Plan</h2><span className="badge approved">active</span></div>
@@ -360,7 +358,7 @@ function AIMachinePlan({plan,since}){
         <g className="ncore-spin-a"><ellipse cx="120" cy="120" rx="106" ry="40" className="ncore-orbit"/><circle cx="226" cy="120" r="3.4" className="ncore-sat"/></g>
         <g className="ncore-spin-b"><ellipse cx="120" cy="120" rx="106" ry="40" className="ncore-orbit dim"/><circle cx="14" cy="120" r="2.6" className="ncore-sat dim"/></g>
         <circle cx="120" cy="120" r={R} className="ncore-track"/>
-        <circle cx="120" cy="120" r={R} className="ncore-prog" strokeDasharray={CIRC} strokeDashoffset={CIRC*(1-prog)}/>
+        <circle cx="120" cy="120" r={R} className="ncore-prog" strokeDasharray={CIRC} strokeDashoffset={CIRC*(1-runProg)}/>
         <g className="ncore-net">
           {net.edges.map((e,i)=><line key={'e'+i} x1={net.pts[e[0]].x} y1={net.pts[e[0]].y} x2={net.pts[e[1]].x} y2={net.pts[e[1]].y} className="ncore-edge"/>)}
           {net.pts.map((p,i)=><circle key={'n'+i} cx={p.x} cy={p.y} r={p.r} className="ncore-node" style={{animationDelay:p.d+'s'}}/>)}
@@ -369,21 +367,21 @@ function AIMachinePlan({plan,since}){
       </svg>
       <span className="ncore-p p1"/><span className="ncore-p p2"/><span className="ncore-p p3"/><span className="ncore-p p4"/><span className="ncore-p p5"/><span className="ncore-p p6"/>
     </div>
-    <div className="ncore-count">{done?'00:00:00':hh+':'+mm+':'+ss}</div>
-    <small className="ncore-clabel">{!t0?'24-HOUR CYCLE':done?'CYCLE COMPLETE':'CYCLE RUNNING'}</small>
-    {sinceMs>0&&<div className="aimachine-term">
-      <div className="aimachine-daylabel">{termDone?'PLAN PERIOD COMPLETE':'DAY '+dayN+' OF '+dur}</div>
-      <div className="aimachine-daybar"><div className="aimachine-dayfill" style={{width:(dayProg*100).toFixed(2)+'%'}}/></div>
-    </div>}
+    <div className="ncore-count">{todayDone?dailyStr+' mined today':dailyStr+' today — run to mine'}</div>
+    <small className="ncore-clabel">{runDone?'2X COMPLETE':'DAILY RUN'}</small>
+    <div className="aimachine-term">
+      <div className="aimachine-daylabel">{runDone?'2X COMPLETE':'RUN '+runCount+' OF '+target}</div>
+      <div className="aimachine-daybar"><div className="aimachine-dayfill" style={{width:(runProg*100).toFixed(2)+'%'}}/></div>
+    </div>
     <div className="aimachine-meta">
       <div><small>Price</small><b>${plan.price}</b></div>
       <div><small>Daily (illustrative)</small><b>{isNaN(Number(plan.price))?'—':(Number(plan.price)/120).toFixed(2)+'%'}</b></div>
       <div><small>Duration</small><b>{plan.dur||120} days</b></div>
     </div>
-    {!t0?<Button onClick={start}>Start 24h cycle</Button>
-    :done?<><p className="muted">Cycle complete — nothing was earned or credited.</p><Button kind="outline" onClick={start}>Restart cycle</Button></>
-    :<p className="muted">Cycle ends in {hh}:{mm}:{ss} — visual tracker only.</p>}
-    <p className="tiny" style={{marginTop:12}}>Visual cycle tracker — this timer does not mine, earn, or credit anything.</p>
+    {runDone?<p className="muted">2X complete — {target} runs done.</p>
+    :todayDone?<p className="muted">Today's run complete — come back tomorrow.</p>
+    :<Button onClick={async()=>{setBusy(true);try{await onRun();}finally{setBusy(false);}}} disabled={busy}>{busy?'Running…':'Run today'}</Button>}
+    <p className="tiny" style={{marginTop:12}}>Daily run records today's mining amount. A missed day is not recovered.</p>
   </div>;
 }
 
@@ -417,6 +415,7 @@ function App(){
   const [profile,setProfile]=useState(null);
   const [deposits,setDeposits]=useState([]);
   const [teamStats,setTeamStats]=useState(null);
+  const [runStats,setRunStats]=useState(null);
   const [withdrawals,setWithdrawals]=useState([]);
   const [siteAddrs,setSiteAddrs]=useState({TRON:'',BNB:'0x73173d35F5D5d6518EF8d32b65d85Ca7910D2376'});
   const [menuItems,setMenuItems]=useState([]);
@@ -534,6 +533,30 @@ function App(){
     try{const {data}=await supabase.rpc('get_team_stats');if(data)setTeamStats(data);}catch{}
   };
   useEffect(()=>{ if(session?.user&&['Overview','Team'].includes(activeTab))loadTeam(); },[activeTab]);
+  const loadRuns=async()=>{
+    if(!supabase||!session?.user)return;
+    try{
+      const {data}=await supabase.from('daily_runs').select('run_date,amount').eq('user_id',session.user.id);
+      const rows=data||[];
+      const d=new Date();const today=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      setRunStats({count:rows.length,total:rows.reduce((s,r)=>s+Number(r.amount||0),0),todayDone:rows.some(r=>r.run_date===today)});
+    }catch{}
+  };
+  const doRun=async()=>{
+    if(!supabase||!session?.user)return;
+    const ap=livePlans.find(p=>p.name===(profile?.active_plan||''));
+    const r=ap?parseFloat(ap.rate):NaN;
+    if(!ap||isNaN(r)){setToast('No active plan to run.');return;}
+    const d=new Date();const today=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const amt=Number((Number(ap.price)*r/100).toFixed(2));
+    try{
+      const {error}=await supabase.from('daily_runs').insert({user_id:session.user.id,run_date:today,amount:amt,plan_name:ap.name});
+      if(error)throw error;
+      setToast("Today's run recorded: $"+amt.toFixed(2));
+      loadRuns();
+    }catch(err){setToast(err.message||'Run failed.');}
+  };
+  useEffect(()=>{ if(session?.user&&['Overview','My Plans'].includes(activeTab))loadRuns(); },[activeTab]);
   useEffect(()=>{
     const onVisible=()=>{ if(document.visibilityState==='visible')refreshUserData(); };
     document.addEventListener('visibilitychange',onVisible);
@@ -639,7 +662,7 @@ function App(){
     </div>;
     if(activeTab==='My Plans')return <div className="tabwrap">
       <div className="sectiontitle"><h2>My Plans</h2></div>
-      {profile?.active_plan?<AIMachinePlan plan={livePlans.find(p=>p.name===profile.active_plan)||{name:profile.active_plan,price:'—',rate:'—',dur:120,tone:'cyan',icon:'◆'}} since={profile?.active_plan_since}/>
+      {profile?.active_plan?<AIMachinePlan plan={livePlans.find(p=>p.name===profile.active_plan)||{name:profile.active_plan,price:'—',rate:'—',dur:120,tone:'cyan',icon:'◆'}} runs={runStats} onRun={doRun}/>
       :<div className="placeholder" style={{marginTop:0}}><div className="bigicon"><Package size={36}/></div><h2>No active plans</h2><p>You don't have any active plans yet. Plans are activated manually after your deposit request is reviewed.</p><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View packages</Button></div>}
     </div>;
     if(activeTab==='Mining cycles')return <div className="tabwrap">
@@ -894,7 +917,7 @@ function App(){
     </div></div></div>;
   }
   if(maintenance)return <div className="authpage"><header className="topbar"><Brand/></header><div className="authstage"><div className="authcard" style={{textAlign:'center'}}><div className="bigicon"><Settings size={44}/></div><h2>Under maintenance</h2><p className="muted">CloudMint is undergoing scheduled maintenance. Please check back soon.</p><div className="supportrow" style={{margin:'18px auto 0'}}><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/> Telegram</a><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/> WhatsApp</a></div></div></div></div>;
-  if(page==='dashboard')return <div className={'appdash'+(menuOpen?'':' menuClosed')}><div className={'drawerBackdrop'+(menuOpen?' open':'')} onClick={()=>setMenuOpen(false)}/><SideNav open={menuOpen} onClose={()=>setMenuOpen(false)} onNavigate={(p)=>{setPage(p);if(typeof window!=='undefined'&&window.innerWidth<=650)setMenuOpen(false)}}/><main className="dashmain">{toast&&<div className="dashtoast">{toast}</div>}<div className="dashTopbar"><button className="hamburger" onClick={()=>setMenuOpen(!menuOpen)} aria-label="Open menu"><Menu/></button><Brand/></div><div className="dashhead"><div><small>USER DASHBOARD</small><h1>{activeTab}</h1></div><div className="userpill"><span className="statusdot"/>{session?.user?.email||'Preview User'}</div></div>{activeTab==='Overview'?<><div className="stats">{[['Day Profit',(()=>{const ap=livePlans.find(p=>p.name===(profile?.active_plan||''));const r=ap?parseFloat(ap.rate):NaN;if(!ap||isNaN(r))return '$0.00';return '$'+Number((Number(ap.price)*r/100).toFixed(2)).toFixed(2);})() ,Wallet],['Pending deposits','$'+deposits.filter(d=>(d.status||'pending')==='pending').reduce((s,d)=>s+Number(d.amount||0),0).toFixed(2),Activity],['Active plans',profile?.active_plan?'1':'0',Package],['Team members',teamStats?String(Number(teamStats.a_count||0)+Number(teamStats.b_count||0)):'0',Users]].map(([t,v,I,sub])=><div className="stat" key={t}><I/><small>{t}</small><b>{v}</b>{sub?<small className="statsub">{sub}</small>:null}</div>)}</div><div className="welcome"><div><small>YOUR CLOUDMINT SPACE</small><h2>Grow your journey, one step at a time.</h2><p>Account activity and package information at a glance.</p></div><Brand/></div><div className="dashsection"><div className="sectiontitle"><h2>Mining plans</h2><span>120-day plan duration</span></div><div className="plangrid">{livePlans.map(p=><div className={`plan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Illustrative daily rate: {p.rate}</small><small>Duration: {p.dur||120} days</small><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View plan</Button></div>)}</div></div><div className="dashsection"><div className="sectiontitle"><h2>Important</h2></div><div className="infoCard"><ShieldCheck/><div><b>Transparent account records</b><p>This preview does not accept deposits, promise returns, or process withdrawals. Connect a compliant payment provider and server-side transaction ledger before launch.</p></div></div></div></>:TabBody()}</main></div>;
+  if(page==='dashboard')return <div className={'appdash'+(menuOpen?'':' menuClosed')}><div className={'drawerBackdrop'+(menuOpen?' open':'')} onClick={()=>setMenuOpen(false)}/><SideNav open={menuOpen} onClose={()=>setMenuOpen(false)} onNavigate={(p)=>{setPage(p);if(typeof window!=='undefined'&&window.innerWidth<=650)setMenuOpen(false)}}/><main className="dashmain">{toast&&<div className="dashtoast">{toast}</div>}<div className="dashTopbar"><button className="hamburger" onClick={()=>setMenuOpen(!menuOpen)} aria-label="Open menu"><Menu/></button><Brand/></div><div className="dashhead"><div><small>USER DASHBOARD</small><h1>{activeTab}</h1></div><div className="userpill"><span className="statusdot"/>{session?.user?.email||'Preview User'}</div></div>{activeTab==='Overview'?<><div className="stats">{[['Day Profit',(()=>{const ap=livePlans.find(p=>p.name===(profile?.active_plan||''));const r=ap?parseFloat(ap.rate):NaN;if(!ap||isNaN(r)||!runStats?.todayDone)return '$0.00';return '$'+Number((Number(ap.price)*r/100).toFixed(2)).toFixed(2);})() ,Wallet],['Pending deposits','$'+deposits.filter(d=>(d.status||'pending')==='pending').reduce((s,d)=>s+Number(d.amount||0),0).toFixed(2),Activity],['Active plans',profile?.active_plan?'1':'0',Package],['Team members',teamStats?String(Number(teamStats.a_count||0)+Number(teamStats.b_count||0)):'0',Users]].map(([t,v,I,sub])=><div className="stat" key={t}><I/><small>{t}</small><b>{v}</b>{sub?<small className="statsub">{sub}</small>:null}</div>)}</div><div className="welcome"><div><small>YOUR CLOUDMINT SPACE</small><h2>Grow your journey, one step at a time.</h2><p>Account activity and package information at a glance.</p></div><Brand/></div><div className="dashsection"><div className="sectiontitle"><h2>Mining plans</h2><span>120-day plan duration</span></div><div className="plangrid">{livePlans.map(p=><div className={`plan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Illustrative daily rate: {p.rate}</small><small>Duration: {p.dur||120} days</small><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View plan</Button></div>)}</div></div><div className="dashsection"><div className="sectiontitle"><h2>Important</h2></div><div className="infoCard"><ShieldCheck/><div><b>Transparent account records</b><p>This preview does not accept deposits, promise returns, or process withdrawals. Connect a compliant payment provider and server-side transaction ledger before launch.</p></div></div></div></>:TabBody()}</main></div>;
   return <div className="site"><header className="topbar"><button className="mobilemenu" onClick={()=>setMobileMenu(!mobileMenu)} aria-label="Menu">{mobileMenu?<X/>:<Menu/>}</button><a onClick={()=>setPage('home')}><Brand/></a><nav className={mobileMenu?'open':''}><a href="#about" onClick={()=>setMobileMenu(false)}>About</a><a href="#how" onClick={()=>setMobileMenu(false)}>How it works</a><a href="#packages" onClick={()=>setMobileMenu(false)}>Packages</a><a href="#rewards" onClick={()=>setMobileMenu(false)}>Rewards</a><a href="#contact" onClick={()=>setMobileMenu(false)}>Contact</a><div className="navbtns"><Button kind="outline" onClick={()=>{setMobileMenu(false);goAuth('login')}}>Login</Button><Button onClick={()=>{setMobileMenu(false);goAuth('register-otp')}}>Register <ArrowRight size={15}/></Button><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/>WhatsApp</a><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/>Telegram</a></div></nav></header><section className="hero"><div className="hero-copy"><div className="eyebrow"><Zap size={14}/> CLOUDMINT PLATFORM</div><h1>Turn your crypto<br/>into <em>new possibilities.</em></h1><p>A modern platform concept for exploring packages, account tools and transparent activity records.</p><div className="heroactions"><Button onClick={()=>goAuth('register-otp')}>Get Started <ArrowRight size={17}/></Button><Button kind="outline" onClick={()=>goAuth('login')}>Login</Button><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/>WhatsApp</a><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/>Telegram</a></div><div className="trustrow"><span><ShieldCheck/> Security-minded</span><span><Zap/> Simple onboarding</span><span><Users/> Community tools</span></div></div><div className="heroart"><div className="artglow"></div><div className="cloudcoin"><Cloud size={190}/><div className="pick">⛏</div><div className="coin">₿</div><div className="circuit">━━━<br/>━━━<br/>━━━</div></div><div className="orbit"></div><div className="orbit orbit2"></div><div className="floatcoin c1">₿</div><div className="floatcoin c2">₿</div><div className="handnote">Mine · Grow · Earn</div></div></section><section className="metricbar"><div><Users/><b>Member tools</b><small>Account dashboard</small></div><div><Wallet/><b>Clear records</b><small>Transaction history</small></div><div><ShieldCheck/><b>Security first</b><small>Verified access</small></div><div><ChartNoAxesCombined/><b>Plan overview</b><small>See plan details</small></div></section><section className="section" id="about"><div className="sectionhead"><small>WHY CLOUDMINT</small><h2>A clear path from sign-up to dashboard</h2><p>Explore the platform design before creating an account.</p></div><div className="steps" id="how">{[['01','Create account','Register with your email and verify the one-time code.'],['02','Review details','Read package terms and funding instructions before taking action.'],['03','Track activity','See account records and plan status in your dashboard.'],['04','Get support','Use the official support and community links for help.']].map(([n,t,d])=><div className="step" key={n}><span>{n}</span><h3>{t}</h3><p>{d}</p></div>)}</div></section><section className="section packages" id="packages"><div className="sectionhead"><small>PACKAGE OVERVIEW</small><h2>Explore the plan designs</h2><p>All displayed prices and rates are illustrative placeholders, not a promise or offer of returns.</p></div><div className="publicplans">{livePlans.map(p=><div className={`publicplan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Illustrative rate: {p.rate}</small><small>Displayed duration: {p.dur||120} days</small><Button onClick={()=>goAuth('login')}>Get Started <ArrowRight size={15}/></Button><p className="tiny">Login or register to continue.</p></div>)}</div></section><section className="section featurestrip" id="rewards"><div className="featurebox"><Gift/><h3>Rewards</h3><p>Reward thresholds and eligibility are displayed transparently after rules are configured.</p><a onClick={()=>goAuth('register-otp')}>Create account →</a></div><div className="featurebox"><Users/><h3>Team tools</h3><p>Referral tracking is planned; commissions must follow published and compliant rules.</p><a onClick={()=>goAuth('register-otp')}>Get started →</a></div><div className="featurebox"><CalendarDays/><h3>Monthly salary</h3><p>Coming Soon</p><span className="tag">COMING SOON</span></div><div className="featurebox"><ShieldCheck/><h3>Secure by design</h3><p>Use email verification and server-side authorization for account protection.</p><span className="tag green">SECURITY FIRST</span></div></section><footer id="contact"><Brand/><div className="footlinks"><a href="#about">About</a><a href="#packages">Packages</a><a onClick={()=>goAuth('login')}>Login</a><a onClick={()=>goAuth('register-otp')}>Register</a></div><div className="community"><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/>WhatsApp</a><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/>Telegram</a></div><small>© 2026 CloudMint. Preview build. Terms, privacy and product claims must be finalized before launch.</small></footer></div>
 }
 createRoot(document.getElementById('root')).render(<App/>);
