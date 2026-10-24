@@ -418,6 +418,23 @@ function App(){
   useEffect(()=>{try{localStorage.setItem('cm_tab',activeTab)}catch{}},[activeTab]);
   const [depositAmount,setDepositAmount]=useState('50');
   const [balance,setBalance]=useState(0);
+  const [miningEarnings, setMiningEarnings] = useState(
+  () => Number(localStorage.getItem('cm_mining_earnings') || '0')
+);
+
+useEffect(() => {
+  const refreshEarnings = () => {
+    setMiningEarnings(
+      Number(localStorage.getItem('cm_mining_earnings') || '0')
+    );
+  };
+
+  window.addEventListener('cm_balance_updated', refreshEarnings);
+
+  return () => {
+    window.removeEventListener('cm_balance_updated', refreshEarnings);
+  };
+}, []);
   const [mining,setMining]=useState([]);
   const [admin,setAdmin]=useState(false);
   const [role,setRole]=useState('user');
