@@ -202,3 +202,5 @@ footer{padding:22px 6.5%}
 @keyframes ncrise{0%{transform:translateY(0);opacity:0}18%{opacity:.9}100%{transform:translateY(-230px);opacity:0}}
 .ncore-count{position:relative;z-index:2;font-family:ui-monospace,Menlo,monospace;font-size:34px;font-weight:800;letter-spacing:3px;color:#eafffb;text-shadow:0 0 22px rgba(34,211,238,.65);margin-top:6px}
 .ncore-clabel{position:relative;z-index:2;display:block;letter-spacing:3px;font-size:11px;color:#7d93b2;margin:6px 0 2px}
+
+.statsub{display:block;font-size:11px;color:#7d93b2;margin-top:4px}
