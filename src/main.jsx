@@ -458,6 +458,13 @@ function App(){
   const isAdminPath=typeof window!=='undefined'&&window.location.pathname.replace(/\/+$/,'')==='/admin';
   const goAuth=(mode='login')=>{setAuthMode(mode);setNotice('');setRecovering(false);setPage('auth');window.scrollTo(0,0)};
   useEffect(()=>{
+    try{
+      const q=new URLSearchParams(window.location.search);
+      const r=q.get('ref');
+      if(r&&/^[A-Za-z0-9]{4,32}$/.test(r))localStorage.setItem('cm_ref',r);
+    }catch{}
+  },[]);
+  useEffect(()=>{
     if(!supabase){setAuthReady(true);return}
     (async()=>{
       try{
@@ -473,6 +480,10 @@ function App(){
       setSession(data.session);
       if(!data.session) setPage(p=>(p==='dashboard'||p==='auth')?'home':p);
       setAuthReady(true);
+      try{
+        if(data.session){localStorage.removeItem('cm_ref');}
+        else{const r=localStorage.getItem('cm_ref');if(r){setAuthMode('register-otp');setPage('auth');}}
+      }catch{}
     })();
     const {data:{subscription}}=supabase.auth.onAuthStateChange((event,s)=>{
       if(event==='PASSWORD_RECOVERY'){ setRecovering(true); setPage('auth'); window.scrollTo(0,0); }
@@ -647,6 +658,7 @@ function App(){
       <div className="sectiontitle"><h2>Team</h2><span>display only</span></div>
       <div className="infoCard"><Users/><div><b>Your referral code</b><p>Share this code with others. Referral tracking shown here is display-only.</p></div></div>
       <div className="addrbox"><small>Referral code</small><p className="addrtext" style={{fontSize:24,letterSpacing:3}}>{refCode||'Login to see your code.'}</p>{refCode&&<Button kind="outline" onClick={()=>copyText(refCode,'Referral code copied')}><Copy size={15}/> Copy code</Button>}</div>
+      {refCode&&<div className="addrbox"><small>Referral link</small><p className="addrtext" style={{fontSize:13,wordBreak:'break-all'}}>{(typeof window!=='undefined'?window.location.origin:'')+'/?ref='+refCode}</p><Button kind="outline" onClick={()=>copyText((typeof window!=='undefined'?window.location.origin:'')+'/?ref='+refCode,'Referral link copied')}><Copy size={15}/> Copy Link</Button></div>}
       <div className="stats" style={{marginTop:18}}><div className="stat"><Users/><small>Team members</small><b>0</b></div></div>
     </div>;
     if(activeTab==='Transactions')return <div className="tabwrap">
@@ -703,6 +715,15 @@ function App(){
       const data=await verifyOtpCode(email,otp);
       if(data.user){
         await supabase.from('profiles').upsert({id:data.user.id,email:email.trim(),username:username||email.split('@')[0],display_name:profileName||username||email.split('@')[0]},{onConflict:'id'});
+        try{
+          const ref=localStorage.getItem('cm_ref');
+          if(ref){
+            const {data:inviter}=await supabase.rpc('resolve_referral_code',{code:ref});
+            if(inviter)await supabase.from('profiles').update({referred_by:inviter}).eq('id',data.user.id);
+            try{localStorage.removeItem('cm_ref')}catch{}
+          }
+        }catch{}
+        try{await supabase.from('profiles').update({referral_code:data.user.id.slice(0,8)}).eq('id',data.user.id)}catch{}
       }
       setNotice('Email verified successfully.');setAuthMode('profile');
     }catch(err){setNotice(err.message||'Code verification failed.')}finally{setBusy(false)}
