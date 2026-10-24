@@ -120,10 +120,7 @@ function AdminPanel({tab,setTab}){
         <tbody>{users.map(u=><tr key={u.email} style={{borderTop:'1px solid #12395c'}}>
           <td style={{padding:'11px 14px'}}>{u.email}</td><td style={{padding:'11px 14px'}}>{u.username||'—'}</td><td style={{padding:'11px 14px'}}>{u.display_name||'—'}</td>
           <td style={{padding:'11px 14px'}}><span className="tag" style={u.role==='admin'?{background:'#06443c',color:'#53f6c8'}:{}}>{u.role||'user'}</span></td>
-          <td style={{padding:'11px 14px'}}><select value={u.active_plan||''} onChange={e=>setPlan(u,e.target.value)} style={{background:'#0b1e33',color:'#dbe7f5',border:'1px solid #1c3a5e',borderRadius:8,padding:'6px 8px',fontSize:12,maxWidth:130}}>
-            <option value="">—</option>
-            {packs.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
-          </select></td>
+          <td style={{padding:'11px 14px'}}>{u.active_plan||'—'}</td>
           <td style={{padding:'11px 14px',color:'#9db5d0'}}>{u.created_at?new Date(u.created_at).toLocaleDateString():'—'}</td>
         </tr>)}{users.length===0&&<tr><td colSpan="6" style={{padding:'16px',color:'#9db5d0'}}>No users found.</td></tr>}</tbody>
       </table>
