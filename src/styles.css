@@ -319,3 +319,6 @@ footer{padding:22px 6.5%}
 .btn.outline{border:1px solid #ffffff55;background:transparent;color:#fff;box-shadow:none}
 .inputwrap:focus-within{border-color:#fbbf24;box-shadow:0 0 0 3px #fbbf2422}
 table th{color:#fbbf24}
+.txlist .txrow{background:linear-gradient(135deg,#2e1065,#7c3aed);border-color:#ffffff22;border-radius:14px}
+.txlist .txrow small{color:#ffffffcc}
+.txlist .txrow .rwd{color:#fbbf24}

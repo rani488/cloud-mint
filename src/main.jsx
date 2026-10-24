@@ -23,7 +23,6 @@ const DEFAULT_MENU=[
  {label:'Deposit instructions',tab_key:'Deposit instructions',icon:'Wallet'},
  {label:'Packages',tab_key:'Packages',icon:'Package'},
  {label:'My Plans',tab_key:'My Plans',icon:'Package'},
- {label:'Mining cycles',tab_key:'Mining cycles',icon:'Zap'},
  {label:'Reinvest',tab_key:'Reinvest',icon:'Activity'},
  {label:'Rewards',tab_key:'Rewards',icon:'Gift'},
  {label:'Team',tab_key:'Team',icon:'Users'},
@@ -399,7 +398,7 @@ function App(){
   const [busy,setBusy]=useState(false);
   const [session,setSession]=useState(null);
   const [mobileMenu,setMobileMenu]=useState(false);
-  const [activeTab,setActiveTab]=useState(()=>{try{return localStorage.getItem('cm_tab')||'Overview'}catch{return 'Overview'}});
+  const [activeTab,setActiveTab]=useState(()=>{try{const t=localStorage.getItem('cm_tab')||'Overview';return t==='Mining cycles'?'Overview':t}catch{return 'Overview'}});
   const [authReady,setAuthReady]=useState(false);
   useEffect(()=>{try{localStorage.setItem('cm_page',page)}catch{}},[page]);
   useEffect(()=>{try{localStorage.setItem('cm_tab',activeTab)}catch{}},[activeTab]);
@@ -665,15 +664,6 @@ function App(){
       {profile?.active_plan?<AIMachinePlan plan={livePlans.find(p=>p.name===profile.active_plan)||{name:profile.active_plan,price:'—',rate:'—',dur:120,tone:'cyan',icon:'◆'}} runs={runStats} onRun={doRun}/>
       :<div className="placeholder" style={{marginTop:0}}><div className="bigicon"><Package size={36}/></div><h2>No active plans</h2><p>You don't have any active plans yet. Plans are activated manually after your deposit request is reviewed.</p><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View packages</Button></div>}
     </div>;
-    if(activeTab==='Mining cycles')return <div className="tabwrap">
-      <div className="sectiontitle"><h2>Mining cycles</h2><span>visual simulation</span></div>
-      <div className="infoCard"><Zap/><div><b>Visual simulation only</b><p>This animation is a visual demonstration. It does not mine, earn, or credit anything to your account.</p></div></div>
-      <div className="simbox">
-        <div className="simbar"><div className="simfill" style={{width:simPct+'%'}}/></div>
-        <p className="muted">{simOn?('Simulating… '+simPct+'%'):(simPct>=100?'Simulation complete — nothing was earned or credited.':'Press start to run the visual simulation.')}</p>
-        <Button onClick={()=>{setSimPct(0);setSimOn(true)}} disabled={simOn}>{simOn?'Running…':'Start simulation'}</Button>
-      </div>
-    </div>;
     if(activeTab==='Reinvest')return <div className="tabwrap">
       <div className="sectiontitle"><h2>Reinvest</h2></div>
       <div className="placeholder" style={{marginTop:0}}><div className="bigicon"><Activity size={36}/></div><h2>Not available</h2><p>Reinvest is disabled in this preview. Balances shown here are illustrative and nothing is credited automatically.</p><Button kind="outline" onClick={()=>setActiveTab('Overview')}>Back to overview</Button></div>
@@ -866,7 +856,7 @@ function App(){
     }catch(err){setNotice(err.message||'Could not update password.')}finally{setBusy(false)}
   }
   function SideNav({onNavigate,open,onClose}){
-    const menu=menuItems.length?menuItems:DEFAULT_MENU;
+    const menu=(menuItems.length?menuItems:DEFAULT_MENU).filter(m=>m.tab_key!=='Mining cycles');
     const go=(m)=>{
       if(m.tab_key.indexOf('url:')===0){window.open(m.tab_key.slice(4),'_blank');return}
       setActiveTab(m.tab_key);onNavigate('dashboard');
