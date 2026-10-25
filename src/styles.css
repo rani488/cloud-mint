@@ -331,3 +331,20 @@ table th{color:#fbbf24}
 .plangrid .plan small{font-size:10px}
 .plangrid .plan .btn{padding:8px 6px;font-size:11px;margin-top:4px}
 @media(max-width:650px){.plangrid{grid-template-columns:repeat(2,1fr);gap:10px;padding:12px}}
+
+/* Button glow rings: every button gets its own coloured light lining, all around */
+.ov-btn-yellow{box-shadow:0 0 0 1.5px #ffc10799,0 0 18px #ffc10788}
+.ov-btn-green{box-shadow:0 0 0 1.5px #10d98a99,0 0 18px #10d98a88}
+.ov-btn-white{box-shadow:0 0 0 1.5px #ffffff99,0 0 18px #c4b5fd88}
+.ov-mini-ref .ov-btn{box-shadow:0 0 0 1.5px #a78bfa99,0 0 18px #a78bfa88}
+.ov-mini-sup .ov-btn{box-shadow:0 0 0 1.5px #fb923c99,0 0 18px #fb923c88}
+.ov-tile.t-teal{box-shadow:0 0 0 1.5px #2dd4bf99,0 0 18px #2dd4bf88}
+.ov-tile.t-purple{box-shadow:0 0 0 1.5px #a855f799,0 0 18px #a855f788}
+.ov-tile.t-orange{box-shadow:0 0 0 1.5px #fb923c99,0 0 18px #fb923c88}
+.ov-tile.t-blue{box-shadow:0 0 0 1.5px #38bdf899,0 0 18px #38bdf888}
+.ov-tile.t-pink{box-shadow:0 0 0 1.5px #f472b699,0 0 18px #f472b688}
+.ov-tile.t-magenta{box-shadow:0 0 0 1.5px #e879f999,0 0 18px #e879f988}
+.ov-tile.t-cyan{box-shadow:0 0 0 1.5px #22d3ee99,0 0 18px #22d3ee88}
+.ov-tile.t-dark{box-shadow:0 0 0 1.5px #94a3b899,0 0 18px #94a3b888}
+.btn{box-shadow:0 0 0 1.5px #fbbf2499,0 0 16px #fbbf2488}
+.btn.outline{box-shadow:0 0 0 1.5px #ffffff66,0 0 14px #ffffff44}

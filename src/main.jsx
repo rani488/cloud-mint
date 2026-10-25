@@ -234,7 +234,7 @@ function AdminPanel({tab,setTab}){
         {amsg&&<p className="muted" style={{marginTop:10}}>{amsg}</p>}
       </div>
     </div></>}
-    <div className="infoCard" style={{marginTop:18}}><ShieldCheck/><div><b>Read-only preview</b><p>The admin view lists account records only. It does not move money, edit rates, approve payouts, or promise returns.</p></div></div>
+
   </div>;
 }
 
@@ -368,7 +368,18 @@ function PackageManager({packs,setPacks}){
   </div>;
 }
 
-function AIMachinePlan({plan,runs,onRun}){
+function CycleTimer({endsAt,onExpire}){
+  const [now,setNow]=useState(Date.now());
+  const firedRef=useRef(false);
+  useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),1000);return ()=>clearInterval(t);},[]);
+  useEffect(()=>{firedRef.current=false;},[endsAt]);
+  const ms=Math.max(0,new Date(endsAt).getTime()-now);
+  useEffect(()=>{if(ms<=0&&!firedRef.current){firedRef.current=true;if(onExpire)onExpire();}},[ms]);
+  const s=Math.floor(ms/1000);const hh=String(Math.floor(s/3600)).padStart(2,'0');const mm=String(Math.floor(s%3600/60)).padStart(2,'0');const ss=String(s%60).padStart(2,'0');
+  return <b>{hh}:{mm}:{ss}</b>;
+}
+
+function AIMachinePlan({plan,runs,cycle,onStart,onComplete}){
   const R=104, CIRC=2*Math.PI*R;
   const target=Number(plan.dur)||120;
   const [busy,setBusy]=useState(false);
@@ -379,7 +390,6 @@ function AIMachinePlan({plan,runs,onRun}){
   const rateNum=parseFloat(plan.rate);
   const dailyNum=isNaN(Number(plan.price))||isNaN(rateNum)?NaN:Number((Number(plan.price)*rateNum/100).toFixed(2));
   const dailyStr=isNaN(dailyNum)?'—':'$'+dailyNum.toFixed(2);
-  const todayDone=!!runs?.todayDone;
   const net=useMemo(()=>{let sd=7;const rnd=()=>{sd=(sd*1664525+1013904223)>>>0;return sd/4294967296;};
     const pts=[],N=26,RR=56;
     for(let i=0;i<N;i++){const a=rnd()*Math.PI*2,r=RR*Math.sqrt(rnd());pts.push({x:120+r*Math.cos(a),y:120+r*Math.sin(a),d:(rnd()*2.6).toFixed(2),r:(1.8+rnd()*1.7).toFixed(1)});}
@@ -408,8 +418,8 @@ function AIMachinePlan({plan,runs,onRun}){
       </svg>
       <span className="ncore-p p1"/><span className="ncore-p p2"/><span className="ncore-p p3"/><span className="ncore-p p4"/><span className="ncore-p p5"/><span className="ncore-p p6"/>
     </div>
-    <div className="ncore-count">{todayDone?dailyStr+' mined today':dailyStr+' today — run to mine'}</div>
-    <small className="ncore-clabel">{runDone?'2X COMPLETE':'DAILY RUN'}</small>
+    <div className="ncore-count">{cycle?dailyStr+' mining now':dailyStr+' per day'}</div>
+    <small className="ncore-clabel">{runDone?'2X COMPLETE':(cycle?'MINING NOW':'READY TO START')}</small>
     <div className="aimachine-term">
       <div className="aimachine-daylabel">{runDone?'2X COMPLETE':'RUN '+runCount+' OF '+target}</div>
       <div className="aimachine-daybar"><div className="aimachine-dayfill" style={{width:(runProg*100).toFixed(2)+'%'}}/></div>
@@ -420,9 +430,9 @@ function AIMachinePlan({plan,runs,onRun}){
       <div><small>Duration</small><b>{plan.dur||120} days</b></div>
     </div>
     {runDone?<p className="muted">2X complete — {target} runs done.</p>
-    :todayDone?<p className="muted">Today's run complete — come back tomorrow.</p>
-    :<Button onClick={async()=>{setBusy(true);try{await onRun();}finally{setBusy(false);}}} disabled={busy}>{busy?'Running…':'Run today'}</Button>}
-    <p className="tiny" style={{marginTop:12}}>Daily run records today's mining amount. A missed day is not recovered.</p>
+    :cycle?<div><p className="muted" style={{marginBottom:6}}>Auto-stops in <CycleTimer endsAt={cycle.ends_at} onExpire={()=>{if(onComplete)onComplete();}}/></p><p className="tiny">Day amount adds to wallet automatically on completion.</p></div>
+    :<Button onClick={async()=>{setBusy(true);try{await onStart();}finally{setBusy(false);}}} disabled={busy}>{busy?'Starting…':'Start mining'}</Button>}
+    <p className="tiny" style={{marginTop:12}}>Start a 24h cycle. When it ends, the day's amount is added to your wallet automatically.</p>
   </div>;
 }
 
@@ -461,6 +471,8 @@ function App(){
   const [commTotals,setCommTotals]=useState({instant:0,daily:0});
   const [runStats,setRunStats]=useState(null);
   const [runRows,setRunRows]=useState([]);
+  const [cycles,setCycles]=useState([]);
+  const completingRef=useRef({});
   const [withdrawals,setWithdrawals]=useState([]);
   const [siteAddrs,setSiteAddrs]=useState({TRON:'',BNB:'0x73173d35F5D5d6518EF8d32b65d85Ca7910D2376'});
   const [menuItems,setMenuItems]=useState([]);
@@ -604,26 +616,50 @@ function App(){
     const rows=(runRows||[]).filter(r=>r.user_plan_id===pid);
     return {count:rows.length,total:rows.reduce((s,r)=>s+Number(r.amount||0),0),todayDone:rows.some(r=>r.run_date===today)};
   };
-  const doRun=async(planArg,planIdArg)=>{
+  const loadCycles=async()=>{
+    if(!supabase||!session?.user)return;
+    try{
+      const {data,error}=await supabase.from('mining_cycles').select('*').eq('user_id',session.user.id).eq('status','running');
+      if(error)throw error;
+      setCycles(data||[]);
+    }catch{ setCycles([]); }
+  };
+  const cycleFor=(pid,pname)=>cycles.find(c=>pid?c.user_plan_id===pid:(c.user_plan_id===null&&c.plan_name===pname));
+  const startCycle=async(planArg,planIdArg)=>{
     if(!supabase||!session?.user)return;
     const ap=planArg||livePlans.find(p=>p.name===(profile?.active_plan||''));
     const r=ap?parseFloat(ap.rate):NaN;
-    if(!ap||isNaN(r)){setToast('No active plan to run.');return;}
-    const d=new Date();const today=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    const amt=Number((Number(ap.price)*r/100).toFixed(2));
+    if(!ap||isNaN(r)||isNaN(Number(ap.price))){setToast('No active plan to start.');return;}
+    const now=new Date();const ends=new Date(now.getTime()+24*3600*1000);
     try{
-      let ins=await supabase.from('daily_runs').insert({user_id:session.user.id,run_date:today,amount:amt,plan_name:ap.name,user_plan_id:planIdArg||null});
-      if(ins.error&&/user_plan_id|column/i.test(ins.error.message||''))ins=await supabase.from('daily_runs').insert({user_id:session.user.id,run_date:today,amount:amt,plan_name:ap.name});
-      if(ins.error)throw ins.error;
-      setToast("Today's run recorded: $"+amt.toFixed(2));
-      loadRuns();
-      try{await supabase.rpc('record_daily_commission',{p_runner:session.user.id,p_amount:amt,p_run_date:today,p_ref_key:planIdArg||ap.name});}
-      catch{try{await supabase.rpc('record_daily_commission',{p_runner:session.user.id,p_amount:amt,p_run_date:today});}catch{}}
+      const {error}=await supabase.from('mining_cycles').insert({user_id:session.user.id,user_plan_id:planIdArg||null,plan_name:ap.name,price:Number(ap.price),rate:r,started_at:now.toISOString(),ends_at:ends.toISOString(),status:'running'});
+      if(error)throw error;
+      setToast('Mining started — 24h timer running.');
+      loadCycles();
     }catch(err){
       const m=err.message||'';
-      if(/duplicate|already exists|unique/i.test(m))setToast('Already claimed today for this plan.');
-      else setToast(m||'Run failed.');
+      if(/duplicate|unique|already/i.test(m))setToast('A cycle is already running for this plan.');
+      else if(/relation|not exist|column/i.test(m))setToast('Mining system not ready yet — run the mining SQL first.');
+      else setToast(m||'Could not start mining.');
     }
+  };
+  const completeCycle=async(cycle)=>{
+    if(!supabase||!session?.user||!cycle)return;
+    if(completingRef.current[cycle.id])return;
+    completingRef.current[cycle.id]=true;
+    const d=new Date();const today=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    try{
+      const {data,error}=await supabase.rpc('complete_mining_cycle',{p_cycle_id:cycle.id,p_run_date:today});
+      if(error)throw error;
+      const amt=Number(data||0);
+      setToast(amt>0?('Day complete — $'+amt.toFixed(2)+' added to wallet.'):'Day complete.');
+      loadCycles();loadRuns();refreshUserData();
+    }catch(err){
+      const m=err.message||'';
+      if(/not found|not running/i.test(m)){ loadCycles();loadRuns(); }
+      else if(/not finished/i.test(m)){ setToast('Cycle not finished yet.'); loadCycles(); }
+      else setToast(m||'Could not complete cycle.');
+    }finally{ delete completingRef.current[cycle.id]; }
   };
   const activatePlan=async(pl)=>{
     if(!supabase||!session?.user)return;
@@ -669,7 +705,7 @@ function App(){
       else setToast(m||'Could not claim reward.');
     }finally{setBusy(false)}
   };
-  useEffect(()=>{ if(session?.user&&['Overview','My Plans'].includes(activeTab))loadRuns(); },[session,activeTab]);
+  useEffect(()=>{ if(session?.user&&['Overview','My Plans'].includes(activeTab)){loadRuns();loadCycles();} },[session,activeTab]);
   useEffect(()=>{ if(session?.user&&activeTab==='Rewards')loadRewards(); },[session,activeTab]);
   const lastVisibleRef=useRef(0);
   useEffect(()=>{
@@ -781,10 +817,10 @@ function App(){
     if(activeTab==='My Plans')return <div className="tabwrap">
       <div className="sectiontitle"><h2>My Plans</h2></div>
       {userPlans.length>0&&<div className="txlist" style={{marginBottom:16}}>{userPlans.map(up=><div className="txrow" key={up.id}><div><b>{up.plan_name} Plan · ${up.price}</b><small>Activated {up.activated_at?new Date(up.activated_at).toLocaleDateString():''} · Daily {Number(up.rate||0).toFixed(2)}%</small></div><span className="badge approved">{up.status||'active'}</span></div>)}</div>}
-      <div className="sectiontitle" style={{marginTop:6}}><h2>Claim daily mining</h2></div>
-      <div className="txlist">{claimPlans.map(pl=>{const st=pl.id?planStats(pl.id):runStats;const amt=isNaN(parseFloat(pl.rate))||isNaN(Number(pl.price))?0:Number((Number(pl.price)*parseFloat(pl.rate)/100).toFixed(2));return <div className="txrow" key={pl.key}><div><b>{pl.name} Plan</b><small>Today: ${amt.toFixed(2)}{st?.todayDone?' · claimed':''}</small></div>{st?.todayDone?<span className="badge approved">claimed</span>:<Button onClick={()=>doRun({name:pl.name,price:pl.price,rate:pl.rate},pl.id)} disabled={busy}>Claim ${amt.toFixed(2)}</Button>}</div>})}{claimPlans.length===0&&<p className="muted">No active plans yet.</p>}</div>
-      {userPlans.map(up=><AIMachinePlan key={up.id} plan={{name:up.plan_name,price:up.price,rate:String(up.rate),dur:120,tone:'cyan',icon:'◆'}} runs={planStats(up.id)} onRun={()=>doRun({name:up.plan_name,price:up.price,rate:String(up.rate)},up.id)}/>)}
-      {userPlans.length===0&&profile?.active_plan?<AIMachinePlan plan={livePlans.find(p=>p.name===profile.active_plan)||{name:profile.active_plan,price:'—',rate:'—',dur:120,tone:'cyan',icon:'◆'}} runs={runStats} onRun={doRun}/>:null}
+      <div className="sectiontitle" style={{marginTop:6}}><h2>Daily mining cycles</h2></div>
+      <div className="txlist">{claimPlans.map(pl=>{const st=pl.id?planStats(pl.id):runStats;const cy=cycleFor(pl.id,pl.name);const amt=isNaN(parseFloat(pl.rate))||isNaN(Number(pl.price))?0:Number((Number(pl.price)*parseFloat(pl.rate)/100).toFixed(2));const done=(st?.count||0)>=120;return <div className="txrow" key={pl.key}><div><b>{pl.name} Plan</b><small>${amt.toFixed(2)} per day{done?' · 2X complete':(cy?' · mining now':'')}</small></div>{done?<span className="badge approved">2X complete</span>:cy?<span className="muted">Ends in <CycleTimer endsAt={cy.ends_at} onExpire={()=>completeCycle(cy)}/></span>:<Button onClick={()=>startCycle({name:pl.name,price:pl.price,rate:pl.rate},pl.id)} disabled={busy}>Start mining</Button>}</div>})}{claimPlans.length===0&&<p className="muted">No active plans yet.</p>}</div>
+      {userPlans.map(up=>{const cy=cycleFor(up.id,up.plan_name);return <AIMachinePlan key={up.id} plan={{name:up.plan_name,price:up.price,rate:String(up.rate),dur:120,tone:'cyan',icon:'◆'}} runs={planStats(up.id)} cycle={cy} onStart={()=>startCycle({name:up.plan_name,price:up.price,rate:String(up.rate)},up.id)} onComplete={()=>cy&&completeCycle(cy)}/>})}
+      {userPlans.length===0&&profile?.active_plan?(()=>{const ap=livePlans.find(p=>p.name===profile.active_plan)||{name:profile.active_plan,price:'—',rate:'—',dur:120,tone:'cyan',icon:'◆'};const cy=cycleFor(null,ap.name);return <AIMachinePlan plan={ap} runs={runStats} cycle={cy} onStart={()=>startCycle(ap,null)} onComplete={()=>cy&&completeCycle(cy)}/>})():null}
       {userPlans.length===0&&!profile?.active_plan&&<div className="placeholder" style={{marginTop:0}}><div className="bigicon"><Package size={36}/></div><h2>No active plans</h2><p>You don't have any active plans yet. Activate a plan from your wallet balance on the Packages page.</p><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View packages</Button></div>}
     </div>;
     if(activeTab==='Reinvest')return <div className="tabwrap">
@@ -794,7 +830,7 @@ function App(){
     if(activeTab==='Rewards')return <div className="tabwrap">
       <div className="sectiontitle"><h2>Rewards</h2></div>
       <div className="infoCard"><Gift/><div><b>Reward levels</b><p>Team size milestones and their reward amounts. Claims are credited after admin review.</p></div></div>
-      <div className="txlist">{(rewardLevels||rewardRows.map(r=>({min_team:r.members,reward:r.reward}))).map(lv=>{const teamCount=teamLevels?teamLevels.reduce((s,l)=>s+Number(l.count||0),0):(teamStats?Number(teamStats.a_count||0)+Number(teamStats.b_count||0):0);const claim=(rewardClaims||[]).find(c=>Number(c.min_team)===Number(lv.min_team));return <div className="txrow" key={lv.min_team}><div><b>{lv.min_team} team members</b><small>{teamCount} members in your team</small></div>{claim?<span className="badge approved">{claim.status}</span>:teamCount>=Number(lv.min_team)?<Button onClick={()=>claimReward(lv)} disabled={busy}>Claim ${Number(lv.reward).toFixed(2)}</Button>:<span className="muted">Locked</span>}</div>})}</div>
+      <div className="txlist">{(rewardLevels||rewardRows.map(r=>({min_team:r.members,reward:r.reward}))).map(lv=>{const teamCount=teamLevels?teamLevels.reduce((s,l)=>s+Number(l.count||0),0):(teamStats?Number(teamStats.a_count||0)+Number(teamStats.b_count||0):0);const claim=(rewardClaims||[]).find(c=>Number(c.min_team)===Number(lv.min_team));return <div className="txrow" key={lv.min_team}><div><b>{lv.min_team} team members</b><small>{teamCount} members in your team</small></div>{claim?<span className="badge approved">{claim.status}</span>:teamCount>=Number(lv.min_team)?<Button onClick={()=>claimReward(lv)} disabled={busy}>Claim ${Number(lv.reward).toFixed(2)}</Button>:<span className="muted">Locked · ${Number(lv.reward).toFixed(2)}</span>}</div>})}</div>
       {!rewardsReady&&<p className="muted">Default levels shown — run the rewards SQL to connect live levels.</p>}
     </div>;
     const tmLevels=teamLevels||[];
