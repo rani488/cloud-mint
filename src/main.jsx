@@ -513,25 +513,18 @@ function App(){
   useEffect(()=>{ if(!toast)return; const t=setTimeout(()=>setToast(''),3200); return ()=>clearTimeout(t); },[toast]);
   const refreshUserData=async()=>{
     if(!supabase||!session?.user)return;
-    try{
-      const uid=session.user.id;
-      const [pr,d,w,pk]=await Promise.all([
-        supabase.from('profiles').select('*').eq('id',uid).single(),
-        supabase.from('deposit_requests').select('*').eq('user_id',uid).order('created_at',{ascending:false}),
-        supabase.from('withdrawal_requests').select('*').eq('user_id',uid).order('created_at',{ascending:false}),
-        supabase.from('packages').select('*').eq('is_active',true).order('price')
-      ]);
-      if(pr.data){setProfile(pr.data);setEditName(pr.data.display_name||'')}
-      setDeposits(d.data||[]);setWithdrawals(w.data||[]);
-      if(pk.data&&pk.data.length)setDbPacks(pk.data);
-    }catch{/* keep defaults */}
+    const uid=session.user.id;
+    try{const pr=await supabase.from('profiles').select('*').eq('id',uid).single();if(pr.data){setProfile(pr.data);setEditName(pr.data.display_name||'')}}catch{}
+    try{const d=await supabase.from('deposit_requests').select('*').eq('user_id',uid).order('created_at',{ascending:false});setDeposits(d.data||[])}catch{}
+    try{const w=await supabase.from('withdrawal_requests').select('*').eq('user_id',uid).order('created_at',{ascending:false});setWithdrawals(w.data||[])}catch{}
+    try{const pk=await supabase.from('packages').select('*').eq('is_active',true).order('price');if(pk.data&&pk.data.length)setDbPacks(pk.data)}catch{}
   };
-  useEffect(()=>{ if(session?.user&&['Overview','Deposit instructions','Withdraw','Packages','My Plans','Transactions','Profile'].includes(activeTab))refreshUserData(); },[activeTab]);
+  useEffect(()=>{ if(session?.user&&['Overview','Deposit instructions','Withdraw','Packages','My Plans','Transactions','Profile'].includes(activeTab))refreshUserData(); },[session,activeTab]);
   const loadTeam=async()=>{
     if(!supabase||!session?.user)return;
     try{const {data}=await supabase.rpc('get_team_stats');if(data)setTeamStats(data);}catch{}
   };
-  useEffect(()=>{ if(session?.user&&['Overview','Team'].includes(activeTab))loadTeam(); },[activeTab]);
+  useEffect(()=>{ if(session?.user&&['Overview','Team'].includes(activeTab))loadTeam(); },[session,activeTab]);
   const loadRuns=async()=>{
     if(!supabase||!session?.user)return;
     try{
@@ -555,7 +548,7 @@ function App(){
       loadRuns();
     }catch(err){setToast(err.message||'Run failed.');}
   };
-  useEffect(()=>{ if(session?.user&&['Overview','My Plans'].includes(activeTab))loadRuns(); },[activeTab]);
+  useEffect(()=>{ if(session?.user&&['Overview','My Plans'].includes(activeTab))loadRuns(); },[session,activeTab]);
   useEffect(()=>{
     const onVisible=()=>{ if(document.visibilityState==='visible')refreshUserData(); };
     document.addEventListener('visibilitychange',onVisible);
