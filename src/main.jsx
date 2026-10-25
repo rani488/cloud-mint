@@ -82,11 +82,19 @@ function AdminPanel({tab,setTab}){
       if(error)throw error;
       if(kind==='dep'){
         setDeps(deps.map(x=>x.id===row.id?{...x,status:'reviewed'}:x));
-        const pack=packs.find(p=>Number(p.price)===Number(row.amount));
-        if(pack&&row.user_id){
-          const stamp=new Date().toISOString();
-          const {error:e2}=await supabase.from('profiles').update({active_plan:pack.name,active_plan_since:stamp}).eq('id',row.user_id);
-          if(!e2)setUsers(users.map(u=>u.id===row.user_id?{...u,active_plan:pack.name,active_plan_since:stamp}:u));
+        if(row.user_id){
+          const {error:ce}=await supabase.rpc('admin_credit_wallet',{p_user_id:row.user_id,p_amount:Number(row.amount),p_ref_id:row.id});
+          if(ce){
+            const pack=packs.find(p=>Number(p.price)===Number(row.amount));
+            if(pack){
+              const stamp=new Date().toISOString();
+              const {error:e2}=await supabase.from('profiles').update({active_plan:pack.name,active_plan_since:stamp}).eq('id',row.user_id);
+              if(!e2)setUsers(users.map(u=>u.id===row.user_id?{...u,active_plan:pack.name,active_plan_since:stamp}:u));
+            }
+            setAmsg('Marked reviewed. Wallet SQL not run yet — balance was not credited (old plan auto-set used). Run the wallet SQL to enable balance credit.');
+          } else {
+            setAmsg('Marked reviewed — $'+Number(row.amount).toFixed(2)+' credited to wallet balance.');
+          }
         }
       }
       else setWds(wds.map(x=>x.id===row.id?{...x,status:'reviewed'}:x));
@@ -420,6 +428,8 @@ function App(){
   const [menuItems,setMenuItems]=useState([]);
   const [maintenance,setMaintenance]=useState(false);
   const [dbPacks,setDbPacks]=useState([]);
+  const [walletBal,setWalletBal]=useState(0);
+  const [userPlans,setUserPlans]=useState([]);
   useEffect(()=>{
     if(!supabase)return;
     (async()=>{
@@ -518,6 +528,8 @@ function App(){
     try{const d=await supabase.from('deposit_requests').select('*').eq('user_id',uid).order('created_at',{ascending:false});setDeposits(d.data||[])}catch{}
     try{const w=await supabase.from('withdrawal_requests').select('*').eq('user_id',uid).order('created_at',{ascending:false});setWithdrawals(w.data||[])}catch{}
     try{const pk=await supabase.from('packages').select('*').eq('is_active',true).order('price');if(pk.data&&pk.data.length)setDbPacks(pk.data)}catch{}
+    try{const wb=await supabase.from('wallet_balances').select('balance').eq('user_id',uid).single();setWalletBal(Number(wb.data?.balance||0))}catch{}
+    try{const up=await supabase.from('user_plans').select('*').eq('user_id',uid).order('activated_at',{ascending:false});setUserPlans(up.data||[])}catch{}
   };
   useEffect(()=>{ if(session?.user&&['Overview','Deposit instructions','Withdraw','Packages','My Plans','Transactions','Profile'].includes(activeTab))refreshUserData(); },[session,activeTab]);
   const loadTeam=async()=>{
@@ -547,6 +559,23 @@ function App(){
       setToast("Today's run recorded: $"+amt.toFixed(2));
       loadRuns();
     }catch(err){setToast(err.message||'Run failed.');}
+  };
+  const activatePlan=async(pl)=>{
+    if(!supabase||!session?.user)return;
+    setBusy(true);
+    try{
+      const rateNum=parseFloat(pl.rate);
+      const {error}=await supabase.rpc('activate_plan_from_wallet',{p_plan_name:pl.name,p_price:Number(pl.price),p_rate:isNaN(rateNum)?0:rateNum});
+      if(error)throw error;
+      try{await supabase.from('profiles').update({active_plan:pl.name,active_plan_since:new Date().toISOString()}).eq('id',session.user.id);}catch{}
+      setToast(pl.name+' plan activated from wallet balance.');
+      refreshUserData();
+    }catch(err){
+      const m=err.message||'';
+      if(/insufficient/i.test(m))setToast('Wallet balance is not enough for this plan. Deposit first.');
+      else if(/function|not exist|relation/i.test(m))setToast('Wallet system not ready yet — run the wallet SQL first.');
+      else setToast(m||'Could not activate plan.');
+    }finally{setBusy(false)}
   };
   useEffect(()=>{ if(session?.user&&['Overview','My Plans'].includes(activeTab))loadRuns(); },[session,activeTab]);
   useEffect(()=>{
@@ -621,6 +650,7 @@ function App(){
     const txs=[...deposits.map(d=>({id:d.id,kind:'Deposit',amt:d.amount,chain:d.chain,status:d.status,created_at:d.created_at,sub:(d.tx_hash?String(d.tx_hash).slice(0,12)+'… · ':'')+d.chain})),...withdrawals.map(w=>({id:w.id,kind:'Withdrawal',amt:w.amount,chain:w.chain,status:w.status,created_at:w.created_at,sub:w.chain+' · '+String(w.wallet_address).slice(0,10)+'…'}))].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
     if(activeTab==='Deposit instructions')return <div className="tabwrap">
       <div className="sectiontitle"><h2>Deposit instructions</h2><span>manual review</span></div>
+      <div className="infoCard"><Wallet/><div><b>Wallet balance: ${'$'+Number(walletBal||0).toFixed(2)}</b><p>Reviewed deposits appear here. Then activate a plan from the Packages page.</p></div></div>
       <div className="infoCard"><Wallet/><div><b>How deposits work</b><p>Send USDT to the address of your chosen chain, then paste the transaction hash below. Every request is recorded as <b>pending</b> and reviewed manually — nothing is credited automatically.</p></div></div>
       <div className="chainrow">{CHAINS.map(c=><button key={c.id} className={'chaincard'+(depChain===c.id?' selected':'')} onClick={()=>setDepChain(c.id)}><b>{c.name}</b><small>{c.token}</small></button>)}</div>
       <div className="addrbox">
@@ -649,13 +679,15 @@ function App(){
     </div>;
     if(activeTab==='Packages')return <div className="tabwrap">
       <div className="sectiontitle"><h2>Packages</h2><span>120-day duration</span></div>
-      <div className="plangrid">{livePlans.map(p=><div className={`plan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Daily rate: {p.rate}</small><small>Duration: {p.dur||120} days</small><Button kind="outline" onClick={()=>{setDepAmount(String(p.price));setActiveTab('Deposit instructions');window.scrollTo(0,0)}}>Deposit to activate</Button></div>)}</div>
-      <div className="infoCard" style={{marginTop:18}}><ShieldCheck/><div><b>Transparent notice</b><p>A deposit does not automatically activate anything — activation is confirmed manually after review.</p></div></div>
+      <div className="infoCard" style={{marginBottom:14}}><Wallet/><div><b>Wallet balance: ${'$'+Number(walletBal||0).toFixed(2)}</b><p>Reviewed deposits land here. Activate any plan from your balance below.</p></div></div>
+      <div className="plangrid">{livePlans.map(p=><div className={`plan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Daily rate: {p.rate}</small><small>Duration: {p.dur||120} days</small><Button kind="outline" onClick={()=>{setDepAmount(String(p.price));setActiveTab('Deposit instructions');window.scrollTo(0,0)}}>Deposit to activate</Button><Button onClick={()=>activatePlan(p)} disabled={busy}>Activate from wallet</Button></div>)}</div>
+      <div className="infoCard" style={{marginTop:18}}><ShieldCheck/><div><b>Transparent notice</b><p>Reviewed deposits land in your wallet balance. Activate any plan from your balance — the price is deducted at once.</p></div></div>
     </div>;
     if(activeTab==='My Plans')return <div className="tabwrap">
       <div className="sectiontitle"><h2>My Plans</h2></div>
+      {userPlans.length>0&&<div className="txlist" style={{marginBottom:16}}>{userPlans.map(up=><div className="txrow" key={up.id}><div><b>{up.plan_name} Plan · ${up.price}</b><small>Activated {up.activated_at?new Date(up.activated_at).toLocaleDateString():''} · Daily {Number(up.rate||0).toFixed(2)}%</small></div><span className="badge approved">{up.status||'active'}</span></div>)}</div>}
       {profile?.active_plan?<AIMachinePlan plan={livePlans.find(p=>p.name===profile.active_plan)||{name:profile.active_plan,price:'—',rate:'—',dur:120,tone:'cyan',icon:'◆'}} runs={runStats} onRun={doRun}/>
-      :<div className="placeholder" style={{marginTop:0}}><div className="bigicon"><Package size={36}/></div><h2>No active plans</h2><p>You don't have any active plans yet. Plans are activated manually after your deposit request is reviewed.</p><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View packages</Button></div>}
+      :<div className="placeholder" style={{marginTop:0}}><div className="bigicon"><Package size={36}/></div><h2>No active plans</h2><p>You don't have any active plans yet. Activate a plan from your wallet balance on the Packages page.</p><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View packages</Button></div>}
     </div>;
     if(activeTab==='Reinvest')return <div className="tabwrap">
       <div className="sectiontitle"><h2>Reinvest</h2></div>
@@ -907,7 +939,7 @@ function App(){
 <div className="ov-sec-title">All Services</div>
 <div className="ov-tiles"><button className="ov-tile t-teal" onClick={()=>{setActiveTab('My Plans');window.scrollTo(0,0)}}><Package/><span>My Plan</span></button><button className="ov-tile t-purple" onClick={()=>{setActiveTab('Deposit instructions');window.scrollTo(0,0)}}><Wallet/><span>Deposit</span></button><button className="ov-tile t-orange" onClick={()=>{setActiveTab('Withdraw');window.scrollTo(0,0)}}><Send/><span>Withdraw</span></button><button className="ov-tile t-blue" onClick={()=>{setActiveTab('Transactions');window.scrollTo(0,0)}}><ChartNoAxesCombined/><span>Transactions</span></button><button className="ov-tile t-pink" onClick={()=>{setActiveTab('Team');window.scrollTo(0,0)}}><Users/><span>Team</span></button><button className="ov-tile t-magenta" onClick={()=>{setActiveTab('Rewards');window.scrollTo(0,0)}}><Gift/><span>Rewards</span></button><button className="ov-tile t-cyan" onClick={()=>{setActiveTab('Profile');window.scrollTo(0,0)}}><UserRound/><span>Profile</span></button><button className="ov-tile t-dark" onClick={signOut}><LogOut/><span>Logout</span></button></div>
 <div className="ov-sec-title">Dashboard Report</div>
-<div className="ov-report"><div className="ov-rcard r-pink"><small>Pending Deposits</small><b>{'$'+deposits.filter(d=>(d.status||'pending')==='pending').reduce((s,d)=>s+Number(d.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-teal"><small>Pending Withdrawals</small><b>{'$'+withdrawals.filter(w=>(w.status||'pending')==='pending').reduce((s,w)=>s+Number(w.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-orange"><small>Total Deposits</small><b>{'$'+deposits.reduce((s,d)=>s+Number(d.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-red"><small>Total Withdrawals</small><b>{'$'+withdrawals.reduce((s,w)=>s+Number(w.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-purple"><small>Active Plans</small><b>{profile?.active_plan?'1':'0'}</b></div><div className="ov-rcard r-green"><small>Team Members</small><b>{teamStats?String(Number(teamStats.a_count||0)+Number(teamStats.b_count||0)):'0'}</b></div></div>
+<div className="ov-report"><div className="ov-rcard r-pink"><small>Pending Deposits</small><b>{'$'+deposits.filter(d=>(d.status||'pending')==='pending').reduce((s,d)=>s+Number(d.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-teal"><small>Pending Withdrawals</small><b>{'$'+withdrawals.filter(w=>(w.status||'pending')==='pending').reduce((s,w)=>s+Number(w.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-orange"><small>Total Deposits</small><b>{'$'+deposits.reduce((s,d)=>s+Number(d.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-red"><small>Total Withdrawals</small><b>{'$'+withdrawals.reduce((s,w)=>s+Number(w.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-purple"><small>Active Plans</small><b>{userPlans.length>0?String(userPlans.length):(profile?.active_plan?'1':'0')}</b></div><div className="ov-rcard r-green"><small>Team Members</small><b>{teamStats?String(Number(teamStats.a_count||0)+Number(teamStats.b_count||0)):'0'}</b></div><div className="ov-rcard r-blue"><small>Wallet Balance</small><b>{'$'+Number(walletBal||0).toFixed(2)}</b></div></div>
 </div><div className="dashsection"><div className="sectiontitle"><h2>Mining plans</h2><span>120-day plan duration</span></div><div className="plangrid">{livePlans.map(p=><div className={`plan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Daily rate: {p.rate}</small><small>Duration: {p.dur||120} days</small><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View plan</Button></div>)}</div></div><div className="dashsection"><div className="sectiontitle"><h2>Important</h2></div><div className="infoCard"><ShieldCheck/><div><b>Transparent account records</b><p>Deposits and withdrawals are reviewed manually before confirmation.</p></div></div></div></>:TabBody()}</main></div>;
   return <div className="site"><header className="topbar"><button className="mobilemenu" onClick={()=>setMobileMenu(!mobileMenu)} aria-label="Menu">{mobileMenu?<X/>:<Menu/>}</button><a onClick={()=>setPage('home')}><Brand/></a><nav className={mobileMenu?'open':''}><a href="#about" onClick={()=>setMobileMenu(false)}>About</a><a href="#how" onClick={()=>setMobileMenu(false)}>How it works</a><a href="#packages" onClick={()=>setMobileMenu(false)}>Packages</a><a href="#rewards" onClick={()=>setMobileMenu(false)}>Rewards</a><a href="#contact" onClick={()=>setMobileMenu(false)}>Contact</a><div className="navbtns"><Button kind="outline" onClick={()=>{setMobileMenu(false);goAuth('login')}}>Login</Button><Button onClick={()=>{setMobileMenu(false);goAuth('register-otp')}}>Register <ArrowRight size={15}/></Button><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/>WhatsApp</a><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/>Telegram</a></div></nav></header><section className="hero"><div className="hero-copy"><div className="eyebrow"><Zap size={14}/> CLOUDMINT PLATFORM</div><h1>Turn your crypto<br/>into <em>new possibilities.</em></h1><p>A modern platform concept for exploring packages, account tools and transparent activity records.</p><div className="heroactions"><Button onClick={()=>goAuth('register-otp')}>Get Started <ArrowRight size={17}/></Button><Button kind="outline" onClick={()=>goAuth('login')}>Login</Button><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/>WhatsApp</a><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/>Telegram</a></div><div className="trustrow"><span><ShieldCheck/> Security-minded</span><span><Zap/> Simple onboarding</span><span><Users/> Community tools</span></div></div><div className="heroart"><div className="artglow"></div><div className="cloudcoin"><Cloud size={190}/><div className="pick">⛏</div><div className="coin">₿</div><div className="circuit">━━━<br/>━━━<br/>━━━</div></div><div className="orbit"></div><div className="orbit orbit2"></div><div className="floatcoin c1">₿</div><div className="floatcoin c2">₿</div><div className="handnote">Mine · Grow · Earn</div></div></section><section className="metricbar"><div><Users/><b>Member tools</b><small>Account dashboard</small></div><div><Wallet/><b>Clear records</b><small>Transaction history</small></div><div><ShieldCheck/><b>Security first</b><small>Verified access</small></div><div><ChartNoAxesCombined/><b>Plan overview</b><small>See plan details</small></div></section><section className="section" id="about"><div className="sectionhead"><small>WHY CLOUDMINT</small><h2>A clear path from sign-up to dashboard</h2><p>Explore the platform design before creating an account.</p></div><div className="steps" id="how">{[['01','Create account','Register with your email and verify the one-time code.'],['02','Review details','Read package terms and funding instructions before taking action.'],['03','Track activity','See account records and plan status in your dashboard.'],['04','Get support','Use the official support and community links for help.']].map(([n,t,d])=><div className="step" key={n}><span>{n}</span><h3>{t}</h3><p>{d}</p></div>)}</div></section><section className="section packages" id="packages"><div className="sectionhead"><small>PACKAGE OVERVIEW</small><h2>Explore the plan designs</h2><p>Plan prices and daily rates are shown below.</p></div><div className="publicplans">{livePlans.map(p=><div className={`publicplan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Rate: {p.rate}</small><small>Displayed duration: {p.dur||120} days</small><Button onClick={()=>goAuth('login')}>Get Started <ArrowRight size={15}/></Button><p className="tiny">Login or register to continue.</p></div>)}</div></section><section className="section featurestrip" id="rewards"><div className="featurebox"><Gift/><h3>Rewards</h3><p>Reward thresholds and eligibility are displayed transparently after rules are configured.</p><a onClick={()=>goAuth('register-otp')}>Create account →</a></div><div className="featurebox"><Users/><h3>Team tools</h3><p>Referral tracking is planned; commissions must follow published and compliant rules.</p><a onClick={()=>goAuth('register-otp')}>Get started →</a></div><div className="featurebox"><CalendarDays/><h3>Monthly salary</h3><p>Coming Soon</p><span className="tag">COMING SOON</span></div><div className="featurebox"><ShieldCheck/><h3>Secure by design</h3><p>Use email verification and server-side authorization for account protection.</p><span className="tag green">SECURITY FIRST</span></div></section><footer id="contact"><Brand/><div className="footlinks"><a href="#about">About</a><a href="#packages">Packages</a><a onClick={()=>goAuth('login')}>Login</a><a onClick={()=>goAuth('register-otp')}>Register</a></div><div className="community"><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/>WhatsApp</a><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/>Telegram</a></div><small>© 2026 CloudMint. Preview build. Terms, privacy and product claims must be finalized before launch.</small></footer></div>
 }
