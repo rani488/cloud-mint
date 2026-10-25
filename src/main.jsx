@@ -426,6 +426,7 @@ function App(){
   const [teamLevels,setTeamLevels]=useState(null);
   const [commTotals,setCommTotals]=useState({instant:0,daily:0});
   const [runStats,setRunStats]=useState(null);
+  const [runRows,setRunRows]=useState([]);
   const [withdrawals,setWithdrawals]=useState([]);
   const [siteAddrs,setSiteAddrs]=useState({TRON:'',BNB:'0x73173d35F5D5d6518EF8d32b65d85Ca7910D2376'});
   const [menuItems,setMenuItems]=useState([]);
@@ -549,27 +550,43 @@ function App(){
   useEffect(()=>{ if(session?.user&&['Overview','Team'].includes(activeTab))loadTeam(); },[session,activeTab]);
   const loadRuns=async()=>{
     if(!supabase||!session?.user)return;
+    let rows=[];
     try{
-      const {data}=await supabase.from('daily_runs').select('run_date,amount').eq('user_id',session.user.id);
-      const rows=data||[];
-      const d=new Date();const today=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-      setRunStats({count:rows.length,total:rows.reduce((s,r)=>s+Number(r.amount||0),0),todayDone:rows.some(r=>r.run_date===today)});
-    }catch{}
+      const {data,error}=await supabase.from('daily_runs').select('run_date,amount,user_plan_id,plan_name').eq('user_id',session.user.id);
+      if(error)throw error;
+      rows=data||[];
+    }catch{
+      try{const {data}=await supabase.from('daily_runs').select('run_date,amount').eq('user_id',session.user.id);rows=data||[];}catch{rows=[];}
+    }
+    setRunRows(rows);
+    const d=new Date();const today=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    setRunStats({count:rows.length,total:rows.reduce((s,r)=>s+Number(r.amount||0),0),todayDone:rows.some(r=>r.run_date===today)});
   };
-  const doRun=async()=>{
+  const planStats=(pid)=>{
+    const d=new Date();const today=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const rows=(runRows||[]).filter(r=>r.user_plan_id===pid);
+    return {count:rows.length,total:rows.reduce((s,r)=>s+Number(r.amount||0),0),todayDone:rows.some(r=>r.run_date===today)};
+  };
+  const doRun=async(planArg,planIdArg)=>{
     if(!supabase||!session?.user)return;
-    const ap=livePlans.find(p=>p.name===(profile?.active_plan||''));
+    const ap=planArg||livePlans.find(p=>p.name===(profile?.active_plan||''));
     const r=ap?parseFloat(ap.rate):NaN;
     if(!ap||isNaN(r)){setToast('No active plan to run.');return;}
     const d=new Date();const today=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     const amt=Number((Number(ap.price)*r/100).toFixed(2));
     try{
-      const {error}=await supabase.from('daily_runs').insert({user_id:session.user.id,run_date:today,amount:amt,plan_name:ap.name});
-      if(error)throw error;
+      let ins=await supabase.from('daily_runs').insert({user_id:session.user.id,run_date:today,amount:amt,plan_name:ap.name,user_plan_id:planIdArg||null});
+      if(ins.error&&/user_plan_id|column/i.test(ins.error.message||''))ins=await supabase.from('daily_runs').insert({user_id:session.user.id,run_date:today,amount:amt,plan_name:ap.name});
+      if(ins.error)throw ins.error;
       setToast("Today's run recorded: $"+amt.toFixed(2));
       loadRuns();
-      try{await supabase.rpc('record_daily_commission',{p_runner:session.user.id,p_amount:amt,p_run_date:today});}catch{}
-    }catch(err){setToast(err.message||'Run failed.');}
+      try{await supabase.rpc('record_daily_commission',{p_runner:session.user.id,p_amount:amt,p_run_date:today,p_ref_key:planIdArg||ap.name});}
+      catch{try{await supabase.rpc('record_daily_commission',{p_runner:session.user.id,p_amount:amt,p_run_date:today});}catch{}}
+    }catch(err){
+      const m=err.message||'';
+      if(/duplicate|already exists|unique/i.test(m))setToast('Already claimed today for this plan.');
+      else setToast(m||'Run failed.');
+    }
   };
   const activatePlan=async(pl)=>{
     if(!supabase||!session?.user)return;
@@ -694,11 +711,15 @@ function App(){
       <div className="plangrid">{livePlans.map(p=><div className={`plan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Daily rate: {p.rate}</small><small>Duration: {p.dur||120} days</small><Button kind="outline" onClick={()=>{setDepAmount(String(p.price));setActiveTab('Deposit instructions');window.scrollTo(0,0)}}>Deposit to activate</Button><Button onClick={()=>activatePlan(p)} disabled={busy}>Activate from wallet</Button></div>)}</div>
       <div className="infoCard" style={{marginTop:18}}><ShieldCheck/><div><b>Transparent notice</b><p>Reviewed deposits land in your wallet balance. Activate any plan from your balance — the price is deducted at once.</p></div></div>
     </div>;
+    const claimPlans=userPlans.length>0?userPlans.map(up=>({key:up.id,name:up.plan_name,price:up.price,rate:String(up.rate),id:up.id})):((()=>{const ap=livePlans.find(p=>p.name===(profile?.active_plan||''));return ap?[{key:ap.name,name:ap.name,price:ap.price,rate:ap.rate,id:null}]:[]})());
     if(activeTab==='My Plans')return <div className="tabwrap">
       <div className="sectiontitle"><h2>My Plans</h2></div>
       {userPlans.length>0&&<div className="txlist" style={{marginBottom:16}}>{userPlans.map(up=><div className="txrow" key={up.id}><div><b>{up.plan_name} Plan · ${up.price}</b><small>Activated {up.activated_at?new Date(up.activated_at).toLocaleDateString():''} · Daily {Number(up.rate||0).toFixed(2)}%</small></div><span className="badge approved">{up.status||'active'}</span></div>)}</div>}
-      {profile?.active_plan?<AIMachinePlan plan={livePlans.find(p=>p.name===profile.active_plan)||{name:profile.active_plan,price:'—',rate:'—',dur:120,tone:'cyan',icon:'◆'}} runs={runStats} onRun={doRun}/>
-      :<div className="placeholder" style={{marginTop:0}}><div className="bigicon"><Package size={36}/></div><h2>No active plans</h2><p>You don't have any active plans yet. Activate a plan from your wallet balance on the Packages page.</p><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View packages</Button></div>}
+      <div className="sectiontitle" style={{marginTop:6}}><h2>Claim daily mining</h2></div>
+      <div className="txlist">{claimPlans.map(pl=>{const st=pl.id?planStats(pl.id):runStats;const amt=isNaN(parseFloat(pl.rate))||isNaN(Number(pl.price))?0:Number((Number(pl.price)*parseFloat(pl.rate)/100).toFixed(2));return <div className="txrow" key={pl.key}><div><b>{pl.name} Plan</b><small>Today: ${amt.toFixed(2)}{st?.todayDone?' · claimed':''}</small></div>{st?.todayDone?<span className="badge approved">claimed</span>:<Button onClick={()=>doRun({name:pl.name,price:pl.price,rate:pl.rate},pl.id)} disabled={busy}>Claim ${amt.toFixed(2)}</Button>}</div>})}{claimPlans.length===0&&<p className="muted">No active plans yet.</p>}</div>
+      {userPlans.map(up=><AIMachinePlan key={up.id} plan={{name:up.plan_name,price:up.price,rate:String(up.rate),dur:120,tone:'cyan',icon:'◆'}} runs={planStats(up.id)} onRun={()=>doRun({name:up.plan_name,price:up.price,rate:String(up.rate)},up.id)}/>)}
+      {userPlans.length===0&&profile?.active_plan?<AIMachinePlan plan={livePlans.find(p=>p.name===profile.active_plan)||{name:profile.active_plan,price:'—',rate:'—',dur:120,tone:'cyan',icon:'◆'}} runs={runStats} onRun={doRun}/>:null}
+      {userPlans.length===0&&!profile?.active_plan&&<div className="placeholder" style={{marginTop:0}}><div className="bigicon"><Package size={36}/></div><h2>No active plans</h2><p>You don't have any active plans yet. Activate a plan from your wallet balance on the Packages page.</p><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View packages</Button></div>}
     </div>;
     if(activeTab==='Reinvest')return <div className="tabwrap">
       <div className="sectiontitle"><h2>Reinvest</h2></div>
@@ -941,7 +962,7 @@ function App(){
   if(maintenance)return <div className="authpage"><header className="topbar"><Brand/></header><div className="authstage"><div className="authcard" style={{textAlign:'center'}}><div className="bigicon"><Settings size={44}/></div><h2>Under maintenance</h2><p className="muted">CloudMint is undergoing scheduled maintenance. Please check back soon.</p><div className="supportrow" style={{margin:'18px auto 0'}}><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/> Telegram</a><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/> WhatsApp</a></div></div></div></div>;
   if(page==='dashboard')return <div className={'appdash'+(menuOpen?'':' menuClosed')}><div className={'drawerBackdrop'+(menuOpen?' open':'')} onClick={()=>setMenuOpen(false)}/><SideNav open={menuOpen} onClose={()=>setMenuOpen(false)} onNavigate={(p)=>{setPage(p);if(typeof window!=='undefined'&&window.innerWidth<=650)setMenuOpen(false)}}/><main className="dashmain">{toast&&<div className="dashtoast">{toast}</div>}<div className="dashTopbar"><button className="hamburger" onClick={()=>setMenuOpen(!menuOpen)} aria-label="Open menu"><Menu/></button><Brand/></div><div className="dashhead"><div><small>USER DASHBOARD</small><h1>{activeTab}</h1></div><div className="userpill"><span className="statusdot"/>{session?.user?.email||'Preview User'}</div></div>{activeTab==='Overview'?<><div className="ov-page">
 <div className="ov-welcome"><div><b className="ov-brand">CloudMint</b><small>WELCOME BACK</small><h2>{profile?.display_name||profile?.username||session?.user?.email||'CloudMint'}</h2><p>Run daily, keep your 2X on track.</p></div><div className="ov-welcome-ic"><Wallet/></div></div>
-<div className="ov-hero"><div className="ov-hero-top"><div className="ov-hero-ic"><Wallet/></div><div><small>DAY PROFIT</small><b>{(()=>{const ap=livePlans.find(p=>p.name===(profile?.active_plan||''));const r=ap?parseFloat(ap.rate):NaN;if(!ap||isNaN(r)||!runStats?.todayDone)return '$0.00';return '$'+Number((Number(ap.price)*r/100).toFixed(2)).toFixed(2);})()}</b></div></div><div className="ov-actions"><button className="ov-btn ov-btn-yellow" onClick={()=>{setActiveTab('Deposit instructions');window.scrollTo(0,0)}}>+ Deposit</button><button className="ov-btn ov-btn-green" onClick={()=>{setActiveTab('Withdraw');window.scrollTo(0,0)}}>↑ Withdraw</button><button className="ov-btn ov-btn-white" onClick={()=>{setActiveTab('My Plans');window.scrollTo(0,0)}}>My Plan</button></div><p className="ov-hero-note">Run daily to keep your 2X on track — a missed day is not recovered.</p></div>
+<div className="ov-hero"><div className="ov-hero-top"><div className="ov-hero-ic"><Wallet/></div><div><small>DAY PROFIT</small><b>{(()=>{const d=new Date();const today=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');return '$'+(runRows||[]).filter(r=>r.run_date===today).reduce((s,r)=>s+Number(r.amount||0),0).toFixed(2);})()}</b></div></div><div className="ov-actions"><button className="ov-btn ov-btn-yellow" onClick={()=>{setActiveTab('Deposit instructions');window.scrollTo(0,0)}}>+ Deposit</button><button className="ov-btn ov-btn-green" onClick={()=>{setActiveTab('Withdraw');window.scrollTo(0,0)}}>↑ Withdraw</button><button className="ov-btn ov-btn-white" onClick={()=>{setActiveTab('My Plans');window.scrollTo(0,0)}}>My Plan</button></div><p className="ov-hero-note">Run daily to keep your 2X on track — a missed day is not recovered.</p></div>
 <div className="ov-duo"><div className="ov-mini ov-mini-ref"><Link/><b>Refer Link</b><p>{(typeof window!=='undefined'?window.location.origin:'')+'/?ref='+(profile?.referral_code||(session?.user?session.user.id.slice(0,8):''))}</p><button className="ov-btn ov-btn-yellow ov-btn-sm" onClick={()=>copyText((typeof window!=='undefined'?window.location.origin:'')+'/?ref='+(profile?.referral_code||(session?.user?session.user.id.slice(0,8):'')),'Referral link copied')}><Copy size={14}/> Copy Link</button></div><div className="ov-mini ov-mini-sup"><MessageCircle/><b>Support</b><p>Need help? Contact support team anytime.</p><button className="ov-btn ov-btn-yellow ov-btn-sm" onClick={()=>{setActiveTab('Support');window.scrollTo(0,0)}}>Open Support</button></div></div>
 <div className="ov-sec-title">All Services</div>
 <div className="ov-tiles"><button className="ov-tile t-teal" onClick={()=>{setActiveTab('My Plans');window.scrollTo(0,0)}}><Package/><span>My Plan</span></button><button className="ov-tile t-purple" onClick={()=>{setActiveTab('Deposit instructions');window.scrollTo(0,0)}}><Wallet/><span>Deposit</span></button><button className="ov-tile t-orange" onClick={()=>{setActiveTab('Withdraw');window.scrollTo(0,0)}}><Send/><span>Withdraw</span></button><button className="ov-tile t-blue" onClick={()=>{setActiveTab('Transactions');window.scrollTo(0,0)}}><ChartNoAxesCombined/><span>Transactions</span></button><button className="ov-tile t-pink" onClick={()=>{setActiveTab('Team');window.scrollTo(0,0)}}><Users/><span>Team</span></button><button className="ov-tile t-magenta" onClick={()=>{setActiveTab('Rewards');window.scrollTo(0,0)}}><Gift/><span>Rewards</span></button><button className="ov-tile t-cyan" onClick={()=>{setActiveTab('Profile');window.scrollTo(0,0)}}><UserRound/><span>Profile</span></button><button className="ov-tile t-dark" onClick={signOut}><LogOut/><span>Logout</span></button></div>
