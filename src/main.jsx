@@ -426,7 +426,7 @@ function AIMachinePlan({plan,runs,cycle,onStart,onComplete}){
     </div>
     <div className="aimachine-meta">
       <div><small>Price</small><b>${plan.price}</b></div>
-      <div><small>Daily</small><b>{isNaN(Number(plan.price))?'—':(Number(plan.price)/120).toFixed(2)+'%'}</b></div>
+      <div><small>Daily</small><b>{isNaN(parseFloat(plan.rate))?'—':parseFloat(plan.rate).toFixed(2)+'%'}</b></div>
       <div><small>Duration</small><b>{plan.dur||120} days</b></div>
     </div>
     {runDone?<p className="muted">2X complete — {target} runs done.</p>
