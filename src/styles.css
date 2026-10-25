@@ -335,5 +335,5 @@ table th{color:#fbbf24}
 /* Running colourful border light (phone call edge-lighting effect): a rainbow line travels around each button */
 @property --beam-angle{syntax:'<angle>';initial-value:0deg;inherits:false}
 @keyframes beam-spin{to{--beam-angle:360deg}}
-.btn,.ov-btn,.ov-tile{position:relative}
-.btn::after,.ov-btn::after,.ov-tile::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:2px;background:conic-gradient(from var(--beam-angle),#ff004c,#ff7a00,#ffee00,#00e676,#00b0ff,#7c4dff,#ff00e5,#ff004c);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:beam-spin 3s linear infinite;pointer-events:none}
+.btn,.ov-btn,.ov-tile,.ov-rcard{position:relative}
+.btn::after,.ov-btn::after,.ov-tile::after,.ov-rcard::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:2px;background:conic-gradient(from var(--beam-angle),#ff004c,#ff7a00,#ffee00,#00e676,#00b0ff,#7c4dff,#ff00e5,#ff004c);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:beam-spin 3s linear infinite;pointer-events:none}
