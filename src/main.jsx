@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createClient } from '@supabase/supabase-js';
 import { Cloud, ShieldCheck, Wallet, Users, Zap, Gift, CalendarDays, ChartNoAxesCombined, Menu, X, ArrowRight, Mail, LockKeyhole, UserRound, CircleHelp, LogOut, Settings, Package, LayoutDashboard, Activity, Copy, Eye, EyeOff, CheckCircle2, AlertTriangle, KeyRound, MessageCircle, Send, Link, Globe, Star, Bell } from 'lucide-react';
@@ -44,6 +44,10 @@ function AdminPanel({tab,setTab}){
   const [addrs,setAddrs]=useState({deposit_tron:'',deposit_bnb:'',maintenance_mode:'off'});
   const [saving,setSaving]=useState(false);
   const [amsg,setAmsg]=useState('');
+  const [rLevels,setRLevels]=useState([]);
+  const [rClaims,setRClaims]=useState([]);
+  const [nTeam,setNTeam]=useState('');
+  const [nReward,setNReward]=useState('');
   const [loading,setLoading]=useState(true);
   const [openDet,setOpenDet]=useState(null);
   const [confirmRm,setConfirmRm]=useState(null);
@@ -52,15 +56,17 @@ function AdminPanel({tab,setTab}){
     (async()=>{
       setLoading(true);
       try{
-        const [u,p,d,w,s]=await Promise.all([
-          supabase.from('profiles').select('id,email,username,display_name,role,active_plan,active_plan_since,created_at').order('created_at',{ascending:false}),
+        const [u,p,d,w,s,rl,rc]=await Promise.all([
+          supabase.from('profiles').select('id,email,username,display_name,role,active_plan,active_plan_since,created_at').order('created_at',{ascending:false}).limit(100),
           supabase.from('packages').select('*').order('price',{ascending:true}),
           supabase.from('deposit_requests').select('*').order('created_at',{ascending:false}).limit(100),
           supabase.from('withdrawal_requests').select('*').order('created_at',{ascending:false}).limit(100),
-          supabase.from('site_settings').select('*')
+          supabase.from('site_settings').select('*'),
+          supabase.from('reward_levels').select('*').order('min_team',{ascending:true}),
+          supabase.from('reward_claims').select('*').order('created_at',{ascending:false}).limit(100)
         ]);
         if(!cancelled){
-          setUsers(u.data||[]); setPacks(p.data||[]); setDeps(d.data||[]); setWds(w.data||[]);
+          setUsers(u.data||[]); setPacks(p.data||[]); setDeps(d.data||[]); setWds(w.data||[]); setRLevels(rl.data||[]); setRClaims(rc.data||[]);
           const m={deposit_tron:'',deposit_bnb:'',maintenance_mode:'off'};(s.data||[]).forEach(r=>{m[r.key]=r.value||''});setAddrs(m);
         }
       }catch{ if(!cancelled){ setUsers([]); setPacks([]); } }
@@ -119,6 +125,26 @@ function AdminPanel({tab,setTab}){
       setWds(wds.filter(w=>w.user_id!==u.id));
       setAmsg('User removed: '+u.email);
     }catch(err){setAmsg(err.message||'Could not remove user. (Run the admin-delete SQL first.)')}
+  }
+  async function reviewRewardClaim(c){
+    try{
+      const {error}=await supabase.rpc('admin_review_reward_claim',{p_claim_id:c.id});
+      if(error)throw error;
+      setRClaims(rClaims.map(x=>x.id===c.id?{...x,status:'reviewed'}:x));
+      setAmsg('Reward claim reviewed — $'+Number(c.amount).toFixed(2)+' credited to wallet.');
+    }catch(err){setAmsg(err.message||'Could not review claim. (Run the rewards SQL first.)')}
+  }
+  async function addRewardLevel(e){
+    e.preventDefault();setAmsg('');
+    if(!nTeam||!nReward){setAmsg('Enter team size and reward.');return}
+    const {data,error}=await supabase.from('reward_levels').insert({min_team:Number(nTeam),reward:Number(nReward)}).select().single();
+    if(error){setAmsg(error.message);return}
+    setRLevels([...rLevels,data].sort((a,b)=>a.min_team-b.min_team));setNTeam('');setNReward('');setAmsg('Reward level added.');
+  }
+  async function delRewardLevel(id){
+    const {error}=await supabase.from('reward_levels').delete().eq('id',id);
+    if(error){setAmsg(error.message);return}
+    setRLevels(rLevels.filter(x=>x.id!==id));
   }
   async function toggleMaintenance(){
     const next=addrs.maintenance_mode==='on'?'off':'on';
@@ -183,6 +209,13 @@ function AdminPanel({tab,setTab}){
           <td style={{padding:'11px 14px',color:'#9db5d0'}}>{w.created_at?new Date(w.created_at).toLocaleString():'—'}</td>
         </tr>)}{wds.length===0&&<tr><td colSpan="6" style={{padding:'16px',color:'#9db5d0'}}>No withdrawal requests.</td></tr>}</tbody>
       </table>
+    </div>
+    :tab==='rewards'?<div>
+      <div className="sectiontitle"><h2>Reward levels</h2></div>
+      <div className="txlist">{rLevels.map(lv=><div className="txrow" key={lv.id}><div><b>{lv.min_team} team members</b></div><span style={{display:'flex',gap:8,alignItems:'center'}}><b>${Number(lv.reward).toFixed(2)}</b><Button kind="outline" onClick={()=>delRewardLevel(lv.id)}>✕</Button></span></div>)}{rLevels.length===0&&<p className="muted">No levels yet — run the rewards SQL for defaults, or add one below.</p>}</div>
+      <form onSubmit={addRewardLevel} className="stackform" style={{marginTop:16,maxWidth:420}}><div style={{display:'flex',gap:10}}><div style={{flex:1}}><label>Team size</label><input value={nTeam} onChange={e=>setNTeam(e.target.value.replace(/\D/g,''))} placeholder="10"/></div><div style={{flex:1}}><label>Reward ($)</label><input value={nReward} onChange={e=>setNReward(e.target.value)} placeholder="3"/></div></div><Button>Add level</Button></form>
+      <div className="sectiontitle" style={{marginTop:22}}><h2>Reward claims</h2></div>
+      <div className="txlist">{rClaims.map(c=>{const u=users.find(x=>x.id===c.user_id);return <div className="txrow" key={c.id}><div><b>{u?u.email:c.user_id}</b><small>{c.min_team} members · ${Number(c.amount).toFixed(2)}</small></div>{c.status==='reviewed'?<span className="badge approved">reviewed</span>:<Button onClick={()=>reviewRewardClaim(c)}>Review + credit</Button>}</div>})}{rClaims.length===0&&<p className="muted">No reward claims.</p>}</div>
     </div>
     :tab==='menu'?<MenuManager/>
     :<><form onSubmit={saveAddrs} className="stackform" style={{maxWidth:560}}>
@@ -401,6 +434,7 @@ function App(){
   const [username,setUsername]=useState('');
   const [profileName,setProfileName]=useState('');
   const [password,setPassword]=useState('');
+  const [codeSent,setCodeSent]=useState(false);
   const [withdrawPassword,setWithdrawPassword]=useState('');
   const [showPass,setShowPass]=useState(false);
   const [notice,setNotice]=useState('');
@@ -433,6 +467,9 @@ function App(){
   const [maintenance,setMaintenance]=useState(false);
   const [dbPacks,setDbPacks]=useState([]);
   const [walletBal,setWalletBal]=useState(0);
+  const [rewardLevels,setRewardLevels]=useState(null);
+  const [rewardsReady,setRewardsReady]=useState(false);
+  const [rewardClaims,setRewardClaims]=useState([]);
   const [userPlans,setUserPlans]=useState([]);
   useEffect(()=>{
     if(!supabase)return;
@@ -552,11 +589,11 @@ function App(){
     if(!supabase||!session?.user)return;
     let rows=[];
     try{
-      const {data,error}=await supabase.from('daily_runs').select('run_date,amount,user_plan_id,plan_name').eq('user_id',session.user.id);
+      const {data,error}=await supabase.from('daily_runs').select('run_date,amount,user_plan_id,plan_name').eq('user_id',session.user.id).limit(500);
       if(error)throw error;
       rows=data||[];
     }catch{
-      try{const {data}=await supabase.from('daily_runs').select('run_date,amount').eq('user_id',session.user.id);rows=data||[];}catch{rows=[];}
+      try{const {data}=await supabase.from('daily_runs').select('run_date,amount').eq('user_id',session.user.id).limit(500);rows=data||[];}catch{rows=[];}
     }
     setRunRows(rows);
     const d=new Date();const today=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -605,9 +642,38 @@ function App(){
       else setToast(m||'Could not activate plan.');
     }finally{setBusy(false)}
   };
+  const loadRewards=async()=>{
+    if(!supabase||!session?.user)return;
+    try{
+      const {data,error}=await supabase.from('reward_levels').select('*').order('min_team',{ascending:true});
+      if(error)throw error;
+      setRewardLevels(data||[]);setRewardsReady(true);
+    }catch{ setRewardLevels(null);setRewardsReady(false); }
+    try{
+      const {data}=await supabase.from('reward_claims').select('*').eq('user_id',session.user.id);
+      setRewardClaims(data||[]);
+    }catch{ setRewardClaims([]); }
+  };
+  const claimReward=async(lv)=>{
+    if(!supabase||!session?.user)return;
+    setBusy(true);
+    try{
+      const {error}=await supabase.from('reward_claims').insert({user_id:session.user.id,min_team:lv.min_team,amount:lv.reward,status:'pending'});
+      if(error)throw error;
+      setToast('Reward claim submitted — pending admin review.');
+      loadRewards();
+    }catch(err){
+      const m=err.message||'';
+      if(/relation|not exist/i.test(m))setToast('Rewards system not ready yet — run the rewards SQL first.');
+      else if(/duplicate|unique/i.test(m))setToast('Already claimed for this level.');
+      else setToast(m||'Could not claim reward.');
+    }finally{setBusy(false)}
+  };
   useEffect(()=>{ if(session?.user&&['Overview','My Plans'].includes(activeTab))loadRuns(); },[session,activeTab]);
+  useEffect(()=>{ if(session?.user&&activeTab==='Rewards')loadRewards(); },[session,activeTab]);
+  const lastVisibleRef=useRef(0);
   useEffect(()=>{
-    const onVisible=()=>{ if(document.visibilityState==='visible')refreshUserData(); };
+    const onVisible=()=>{ if(document.visibilityState==='visible'){const now=Date.now();if(now-lastVisibleRef.current>60000){lastVisibleRef.current=now;refreshUserData();}} };
     document.addEventListener('visibilitychange',onVisible);
     window.addEventListener('focus',onVisible);
     return ()=>{document.removeEventListener('visibilitychange',onVisible);window.removeEventListener('focus',onVisible);};
@@ -727,8 +793,9 @@ function App(){
     </div>;
     if(activeTab==='Rewards')return <div className="tabwrap">
       <div className="sectiontitle"><h2>Rewards</h2></div>
-      <div className="infoCard"><Gift/><div><b>Reward levels</b><p>Team size milestones and their reward amounts.</p></div></div>
-      <div className="txlist">{rewardRows.map(r=><div className="txrow" key={r.members}><div><b>{r.members} team members</b></div><b className="rwd">${r.reward}</b></div>)}</div>
+      <div className="infoCard"><Gift/><div><b>Reward levels</b><p>Team size milestones and their reward amounts. Claims are credited after admin review.</p></div></div>
+      <div className="txlist">{(rewardLevels||rewardRows.map(r=>({min_team:r.members,reward:r.reward}))).map(lv=>{const teamCount=teamLevels?teamLevels.reduce((s,l)=>s+Number(l.count||0),0):(teamStats?Number(teamStats.a_count||0)+Number(teamStats.b_count||0):0);const claim=(rewardClaims||[]).find(c=>Number(c.min_team)===Number(lv.min_team));return <div className="txrow" key={lv.min_team}><div><b>{lv.min_team} team members</b><small>{teamCount} members in your team</small></div>{claim?<span className="badge approved">{claim.status}</span>:teamCount>=Number(lv.min_team)?<Button onClick={()=>claimReward(lv)} disabled={busy}>Claim ${Number(lv.reward).toFixed(2)}</Button>:<span className="muted">Locked</span>}</div>})}</div>
+      {!rewardsReady&&<p className="muted">Default levels shown — run the rewards SQL to connect live levels.</p>}
     </div>;
     const tmLevels=teamLevels||[];
     const tmTotalMembers=tmLevels.reduce((s,l)=>s+Number(l.count||0),0);
@@ -775,6 +842,18 @@ function App(){
       if(error)throw error;
       setNotice('Verification code sent. Check your email, including Spam/Junk.');
       setAuthMode('verify');
+    }catch(err){setNotice(err.message||'Could not send code. Check Supabase email settings.')}finally{setBusy(false)}
+  }
+  async function sendRegCode(){
+    setNotice('');
+    if(!email.trim()){setNotice('Please enter your email address first.');return}
+    if(!configured){setNotice('Demo preview: add Supabase URL and publishable key in .env to enable email OTP.');return}
+    setBusy(true);
+    try{
+      const {error}=await supabase.auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true}});
+      if(error)throw error;
+      setCodeSent(true);
+      setNotice('Verification code sent. Check your email, including Spam/Junk.');
     }catch(err){setNotice(err.message||'Could not send code. Check Supabase email settings.')}finally{setBusy(false)}
   }
   async function verifyOtpCode(mail,code){
@@ -836,6 +915,31 @@ function App(){
       setNotice('Profile saved. For security, withdrawal PIN/password setup must be implemented server-side before real withdrawals are enabled.');
       setPage('dashboard');
     }catch(err){setNotice(err.message||'Could not save profile.')}finally{setBusy(false)}
+  }
+  async function finishRegister(e){
+    e.preventDefault();setNotice('');
+    if(!configured){setNotice('Demo preview: connect Supabase to enable registration.');return}
+    if(!username.trim()||username.trim().length<3){setNotice('Choose a username (at least 3 characters).');return}
+    if(password.length<8){setNotice('Use a password with at least 8 characters.');return}
+    if(!/^[0-9]{6,8}$/.test(otp)){setNotice('Enter the 6–8 digit code from your email.');return}
+    setBusy(true);
+    try{
+      const data=await verifyOtpCode(email,otp);
+      if(!data.user)throw new Error('Code verification failed.');
+      await supabase.from('profiles').upsert({id:data.user.id,email:email.trim(),username:username.trim(),display_name:profileName||username.trim()},{onConflict:'id'});
+      try{
+        const ref=localStorage.getItem('cm_ref');
+        if(ref){
+          const {data:inviter}=await supabase.rpc('resolve_referral_code',{code:ref});
+          if(inviter)await supabase.from('profiles').update({referred_by:inviter}).eq('id',data.user.id);
+          try{localStorage.removeItem('cm_ref')}catch{}
+        }
+      }catch{}
+      try{await supabase.from('profiles').update({referral_code:data.user.id.slice(0,8)}).eq('id',data.user.id)}catch{}
+      const {error:perr}=await supabase.auth.updateUser({password});
+      if(perr)throw perr;
+      setPage('dashboard');
+    }catch(err){setNotice(err.message||'Could not create account.')}finally{setBusy(false)}
   }
   async function sendReset(e){
     e.preventDefault();setNotice('');
@@ -921,7 +1025,7 @@ function App(){
     </aside>;
   }
   const authContent=()=>{
-    if(authMode==='register-otp')return <form onSubmit={sendOtp} className="authform"><h2>Create your account</h2><p className="muted">Enter your email and we’ll send a verification code.</p><label>Email address</label><div className="inputwrap"><Mail/><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" required/></div><Button disabled={busy}>{busy?'Sending…':'Send OTP'}</Button><p className="switch">Already registered? <a onClick={()=>goAuth('login')}>Login</a></p></form>;
+    if(authMode==='register-otp')return <form onSubmit={finishRegister} className="authform"><h2>Create your account</h2><p className="muted">Enter your username, email and password, then the verification code sent to your email.</p><label>Username</label><div className="inputwrap"><UserRound/><input value={username} onChange={e=>setUsername(e.target.value)} required minLength="3" placeholder="Choose a username"/></div><label>Email address</label><div className="inputwrap"><Mail/><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" required/></div><label>Login password</label><div className="inputwrap"><LockKeyhole/><input type={showPass?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} minLength="8" required placeholder="At least 8 characters"/><button type="button" className="iconbtn" onClick={()=>setShowPass(!showPass)}>{showPass?<EyeOff/>:<Eye/>}</button></div><label>Verification code</label><div className="inputwrap"><ShieldCheck/><input inputMode="numeric" maxLength="8" value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,''))} placeholder="12345678" required/></div><p className="switch">{codeSent?'Code sent — check email, including Spam/Junk. ':''}<a onClick={sendRegCode}>Send code</a></p><Button disabled={busy}>{busy?'Creating…':'Create account'}</Button><p className="switch">Already registered? <a onClick={()=>goAuth('login')}>Login</a></p></form>;
     if(authMode==='verify')return <form onSubmit={verifyOtp} className="authform"><h2>Verify your email</h2><p className="muted">Enter the 6–8 digit code sent to <b>{email}</b>.</p><label>Verification code</label><div className="inputwrap"><ShieldCheck/><input inputMode="numeric" maxLength="8" value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,''))} placeholder="12345678" required/></div><Button disabled={busy}>{busy?'Verifying…':'Verify code'}</Button><p className="switch"><a onClick={()=>setAuthMode('register-otp')}>Change email / resend code</a></p></form>;
     if(authMode==='profile')return <form onSubmit={finishProfile} className="authform"><h2>Set up your profile</h2><p className="muted">Your email has been verified. Finish your account details.</p><label>Username</label><div className="inputwrap"><UserRound/><input value={username} onChange={e=>setUsername(e.target.value)} required minLength="3" placeholder="Choose a username"/></div><label>Profile name</label><div className="inputwrap"><UserRound/><input value={profileName} onChange={e=>setProfileName(e.target.value)} required placeholder="Your display name"/></div><label>Account password</label><div className="inputwrap"><LockKeyhole/><input type={showPass?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} minLength="8" required placeholder="At least 8 characters"/><button type="button" className="iconbtn" onClick={()=>setShowPass(!showPass)}>{showPass?<EyeOff/>:<Eye/>}</button></div><Button disabled={busy}>{busy?'Saving…':'Complete registration'}</Button></form>;
     if(authMode==='forgot')return <form onSubmit={sendReset} className="authform"><h2>Reset your password</h2><p className="muted">Enter your account email and we’ll send you a reset link.</p><label>Email address</label><div className="inputwrap"><Mail/><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" required/></div><Button disabled={busy}>{busy?'Sending…':'Send reset link'}</Button><p className="switch"><a onClick={()=>goAuth('login')}>Back to login</a></p></form>;
@@ -934,7 +1038,7 @@ function App(){
   if(isAdminPath){
     const isAdmin=!!(session&&roleChecked&&role==='admin');
     if(isAdmin){
-      const atabs=[['users','Users',Users],['packages','Packages',Package],['deposits','Deposits',Wallet],['withdrawals','Withdrawals',Wallet],['settings','Settings',Settings],['menu','Menu',Menu]];
+      const atabs=[['users','Users',Users],['packages','Packages',Package],['deposits','Deposits',Wallet],['withdrawals','Withdrawals',Wallet],['rewards','Rewards',Gift],['settings','Settings',Settings],['menu','Menu',Menu]];
       return <div className={'appdash'+(menuOpen?'':' menuClosed')}>
         <div className={'drawerBackdrop'+(menuOpen?' open':'')} onClick={()=>setMenuOpen(false)}/>
         <aside className={'side'+(menuOpen?' open':'')}>
@@ -967,7 +1071,7 @@ function App(){
 <div className="ov-sec-title">All Services</div>
 <div className="ov-tiles"><button className="ov-tile t-teal" onClick={()=>{setActiveTab('My Plans');window.scrollTo(0,0)}}><Package/><span>My Plan</span></button><button className="ov-tile t-purple" onClick={()=>{setActiveTab('Deposit instructions');window.scrollTo(0,0)}}><Wallet/><span>Deposit</span></button><button className="ov-tile t-orange" onClick={()=>{setActiveTab('Withdraw');window.scrollTo(0,0)}}><Send/><span>Withdraw</span></button><button className="ov-tile t-blue" onClick={()=>{setActiveTab('Transactions');window.scrollTo(0,0)}}><ChartNoAxesCombined/><span>Transactions</span></button><button className="ov-tile t-pink" onClick={()=>{setActiveTab('Team');window.scrollTo(0,0)}}><Users/><span>Team</span></button><button className="ov-tile t-magenta" onClick={()=>{setActiveTab('Rewards');window.scrollTo(0,0)}}><Gift/><span>Rewards</span></button><button className="ov-tile t-cyan" onClick={()=>{setActiveTab('Profile');window.scrollTo(0,0)}}><UserRound/><span>Profile</span></button><button className="ov-tile t-dark" onClick={signOut}><LogOut/><span>Logout</span></button></div>
 <div className="ov-sec-title">Dashboard Report</div>
-<div className="ov-report"><div className="ov-rcard r-pink"><small><Bell size={13}/> Pending Deposits</small><b>{'$'+deposits.filter(d=>(d.status||'pending')==='pending').reduce((s,d)=>s+Number(d.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-teal"><small><Send size={13}/> Pending Withdrawals</small><b>{'$'+withdrawals.filter(w=>(w.status||'pending')==='pending').reduce((s,w)=>s+Number(w.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-orange"><small><ChartNoAxesCombined size={13}/> Total Deposits</small><b>{'$'+deposits.reduce((s,d)=>s+Number(d.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-red"><small><Activity size={13}/> Total Withdrawals</small><b>{'$'+withdrawals.reduce((s,w)=>s+Number(w.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-purple"><small><Package size={13}/> Active Plans</small><b>{userPlans.length>0?String(userPlans.length):(profile?.active_plan?'1':'0')}</b></div><div className="ov-rcard r-green"><small>Team Members</small><b>{teamLevels?String(teamLevels.reduce((s,l)=>s+Number(l.count||0),0)):(teamStats?String(Number(teamStats.a_count||0)+Number(teamStats.b_count||0)):'0')}</b></div><div className="ov-rcard r-blue"><small><Wallet size={13}/> Wallet Balance</small><b>{'$'+Number(walletBal||0).toFixed(2)}</b></div></div>
+<div className="ov-report"><div className="ov-rcard r-pink"><small><Bell size={13}/> Pending Deposits</small><b>{'$'+deposits.filter(d=>(d.status||'pending')==='pending').reduce((s,d)=>s+Number(d.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-teal"><small><Send size={13}/> Pending Withdrawals</small><b>{'$'+withdrawals.filter(w=>(w.status||'pending')==='pending').reduce((s,w)=>s+Number(w.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-orange"><small><ChartNoAxesCombined size={13}/> Total Deposits</small><b>{'$'+deposits.reduce((s,d)=>s+Number(d.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-red"><small><Activity size={13}/> Total Withdrawals</small><b>{'$'+withdrawals.reduce((s,w)=>s+Number(w.amount||0),0).toFixed(2)}</b></div><div className="ov-rcard r-purple"><small><Package size={13}/> Active Plans</small><b>{userPlans.length>0?String(userPlans.length):(profile?.active_plan?'1':'0')}</b></div><div className="ov-rcard r-green"><small>Team Members</small><b>{teamLevels?String(teamLevels.reduce((s,l)=>s+Number(l.count||0),0)):(teamStats?String(Number(teamStats.a_count||0)+Number(teamStats.b_count||0)):'0')}</b></div><div className="ov-rcard r-blue"><small><Wallet size={13}/> Wallet Balance</small><b>{'$'+Number(walletBal||0).toFixed(2)}</b></div><div className="ov-rcard r-teal"><small><Activity size={13}/> Daily mining</small><b>{'$'+Number(runStats?.total||0).toFixed(2)}</b></div><div className="ov-rcard r-green"><small><Zap size={13}/> Instant commission</small><b>{'$'+Number(commTotals?.instant||0).toFixed(2)}</b></div><div className="ov-rcard r-orange"><small><Users size={13}/> Daily commission</small><b>{'$'+Number(commTotals?.daily||0).toFixed(2)}</b></div>{(()=>{const earned=Number(runStats?.total||0)+Number(commTotals?.instant||0)+Number(commTotals?.daily||0);const invested=(deposits||[]).filter(d=>d.status==='reviewed').reduce((s,d)=>s+Number(d.amount||0),0);const cap=invested*2;const pct=cap>0?Math.min(100,Math.floor(earned/cap*100)):0;return <div className="ov-rcard r-dark"><small><ChartNoAxesCombined size={13}/> 2X progress</small><b>{pct}%</b><div style={{height:8,background:'#12395c',borderRadius:99,marginTop:6}}><div style={{height:8,width:pct+'%',background:'#ffc107',borderRadius:99}}/></div><small style={{marginTop:6}}>{'$'+earned.toFixed(2)} of {'$'+cap.toFixed(2)}</small></div>})()}</div>
 </div><div className="dashsection"><div className="sectiontitle"><h2>Mining plans</h2><span>120-day plan duration</span></div><div className="plangrid">{livePlans.map(p=><div className={`plan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Daily rate: {p.rate}</small><small>Duration: {p.dur||120} days</small><Button kind="outline" onClick={()=>setActiveTab('Packages')}>View plan</Button></div>)}</div></div><div className="dashsection"><div className="sectiontitle"><h2>Important</h2></div><div className="infoCard"><ShieldCheck/><div><b>Transparent account records</b><p>Deposits and withdrawals are reviewed manually before confirmation.</p></div></div></div></>:TabBody()}</main></div>;
   return <div className="site"><header className="topbar"><button className="mobilemenu" onClick={()=>setMobileMenu(!mobileMenu)} aria-label="Menu">{mobileMenu?<X/>:<Menu/>}</button><a onClick={()=>setPage('home')}><Brand/></a><nav className={mobileMenu?'open':''}><a href="#about" onClick={()=>setMobileMenu(false)}>About</a><a href="#how" onClick={()=>setMobileMenu(false)}>How it works</a><a href="#packages" onClick={()=>setMobileMenu(false)}>Packages</a><a href="#rewards" onClick={()=>setMobileMenu(false)}>Rewards</a><a href="#contact" onClick={()=>setMobileMenu(false)}>Contact</a><div className="navbtns"><Button kind="outline" onClick={()=>{setMobileMenu(false);goAuth('login')}}>Login</Button><Button onClick={()=>{setMobileMenu(false);goAuth('register-otp')}}>Register <ArrowRight size={15}/></Button><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/>WhatsApp</a><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/>Telegram</a></div></nav></header><section className="hero"><div className="hero-copy"><div className="eyebrow"><Zap size={14}/> CLOUDMINT PLATFORM</div><h1>Turn your crypto<br/>into <em>new possibilities.</em></h1><p>A modern platform concept for exploring packages, account tools and transparent activity records.</p><div className="heroactions"><Button onClick={()=>goAuth('register-otp')}>Get Started <ArrowRight size={17}/></Button><Button kind="outline" onClick={()=>goAuth('login')}>Login</Button><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/>WhatsApp</a><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/>Telegram</a></div><div className="trustrow"><span><ShieldCheck/> Security-minded</span><span><Zap/> Simple onboarding</span><span><Users/> Community tools</span></div></div><div className="heroart"><div className="artglow"></div><div className="cloudcoin"><Cloud size={190}/><div className="pick">⛏</div><div className="coin">₿</div><div className="circuit">━━━<br/>━━━<br/>━━━</div></div><div className="orbit"></div><div className="orbit orbit2"></div><div className="floatcoin c1">₿</div><div className="floatcoin c2">₿</div><div className="handnote">Mine · Grow · Earn</div></div></section><section className="metricbar"><div><Users/><b>Member tools</b><small>Account dashboard</small></div><div><Wallet/><b>Clear records</b><small>Transaction history</small></div><div><ShieldCheck/><b>Security first</b><small>Verified access</small></div><div><ChartNoAxesCombined/><b>Plan overview</b><small>See plan details</small></div></section><section className="section" id="about"><div className="sectionhead"><small>WHY CLOUDMINT</small><h2>A clear path from sign-up to dashboard</h2><p>Explore the platform design before creating an account.</p></div><div className="steps" id="how">{[['01','Create account','Register with your email and verify the one-time code.'],['02','Review details','Read package terms and funding instructions before taking action.'],['03','Track activity','See account records and plan status in your dashboard.'],['04','Get support','Use the official support and community links for help.']].map(([n,t,d])=><div className="step" key={n}><span>{n}</span><h3>{t}</h3><p>{d}</p></div>)}</div></section><section className="section packages" id="packages"><div className="sectionhead"><small>PACKAGE OVERVIEW</small><h2>Explore the plan designs</h2><p>Plan prices and daily rates are shown below.</p></div><div className="publicplans">{livePlans.map(p=><div className={`publicplan ${p.tone}`} key={p.name}><div className="planicon">{p.icon}</div><h3>{p.name} Plan</h3><b className="price">${p.price}</b><small>Rate: {p.rate}</small><small>Displayed duration: {p.dur||120} days</small><Button onClick={()=>goAuth('login')}>Get Started <ArrowRight size={15}/></Button><p className="tiny">Login or register to continue.</p></div>)}</div></section><section className="section featurestrip" id="rewards"><div className="featurebox"><Gift/><h3>Rewards</h3><p>Reward thresholds and eligibility are displayed transparently after rules are configured.</p><a onClick={()=>goAuth('register-otp')}>Create account →</a></div><div className="featurebox"><Users/><h3>Team tools</h3><p>Referral tracking is planned; commissions must follow published and compliant rules.</p><a onClick={()=>goAuth('register-otp')}>Get started →</a></div><div className="featurebox"><CalendarDays/><h3>Monthly salary</h3><p>Coming Soon</p><span className="tag">COMING SOON</span></div><div className="featurebox"><ShieldCheck/><h3>Secure by design</h3><p>Use email verification and server-side authorization for account protection.</p><span className="tag green">SECURITY FIRST</span></div></section><footer id="contact"><Brand/><div className="footlinks"><a href="#about">About</a><a href="#packages">Packages</a><a onClick={()=>goAuth('login')}>Login</a><a onClick={()=>goAuth('register-otp')}>Register</a></div><div className="community"><a className="btn wa" href="https://whatsapp.com/channel/0029VbC09FZHgZWWEZHBCz3P" target="_blank" rel="noreferrer"><MessageCircle size={15}/>WhatsApp</a><a className="btn tg" href="https://t.me/Jabid12" target="_blank" rel="noreferrer"><Send size={15}/>Telegram</a></div><small>© 2026 CloudMint. Preview build. Terms, privacy and product claims must be finalized before launch.</small></footer></div>
 }
