@@ -99,13 +99,21 @@ function AdminPanel({tab,setTab}){
             }
             setAmsg('Marked reviewed. Wallet SQL not run yet — balance was not credited (old plan auto-set used). Run the wallet SQL to enable balance credit.');
           } else {
-            try{await supabase.rpc('record_instant_commission',{p_depositor:row.user_id,p_amount:Number(row.amount),p_ref_key:String(row.id)});}catch{}
-            setAmsg('Marked reviewed — $'+Number(row.amount).toFixed(2)+' credited to wallet balance.');
+            const {error:ie}=await supabase.rpc('record_instant_commission',{p_depositor:row.user_id,p_amount:Number(row.amount),p_ref_key:String(row.id)});
+            if(ie) setAmsg('Marked reviewed — wallet credited, but team commission FAILED: '+ie.message+' — use Retry commission on this deposit.');
+            else setAmsg('Marked reviewed — $'+Number(row.amount).toFixed(2)+' credited to wallet balance. Team commission (L1 10% / L2 5% / L3 2%) sent to referrers if linked.');
           }
         }
       }
       else setWds(wds.map(x=>x.id===row.id?{...x,status:'reviewed'}:x));
     }catch(err){setAmsg(err.message||'Could not update. (Run the admin-update SQL first.)')}
+  }
+  async function retryCommission(row){
+    try{
+      const {error}=await supabase.rpc('record_instant_commission',{p_depositor:row.user_id,p_amount:Number(row.amount),p_ref_key:String(row.id)});
+      if(error)throw error;
+      setAmsg('Team commission re-run for the $'+Number(row.amount).toFixed(2)+' deposit. If the depositor had a referrer linked, L1 10% / L2 5% / L3 2% is now credited. Already-paid deposits are never paid twice.');
+    }catch(err){setAmsg('Commission retry failed: '+(err.message||'unknown error'))}
   }
   async function setPlan(u,planName){
     try{
@@ -192,7 +200,7 @@ function AdminPanel({tab,setTab}){
         <tbody>{deps.map(d=><tr key={d.id} style={{borderTop:'1px solid #12395c'}}>
           <td style={{padding:'11px 14px'}}>{d.email||'—'}</td><td style={{padding:'11px 14px'}}>{d.chain}</td><td style={{padding:'11px 14px'}}>${d.amount}</td>
           <td style={{padding:'11px 14px',fontFamily:'monospace',fontSize:11}} title={d.tx_hash}>{String(d.tx_hash).slice(0,10)}…{String(d.tx_hash).slice(-6)}</td>
-          <td style={{padding:'11px 14px'}}><span className={'badge '+(d.status||'pending')}>{d.status||'pending'}</span>{(d.status||'pending')!=='reviewed'&&<button style={{marginLeft:8,background:'transparent',border:'1px solid #2b5a8f',color:'#9cc8ff',borderRadius:99,padding:'3px 10px',fontSize:10,fontWeight:700,cursor:'pointer'}} onClick={()=>markReviewed('dep',d)}>Mark reviewed</button>}</td>
+          <td style={{padding:'11px 14px'}}><span className={'badge '+(d.status||'pending')}>{d.status||'pending'}</span>{(d.status||'pending')!=='reviewed'&&<button style={{marginLeft:8,background:'transparent',border:'1px solid #2b5a8f',color:'#9cc8ff',borderRadius:99,padding:'3px 10px',fontSize:10,fontWeight:700,cursor:'pointer'}} onClick={()=>markReviewed('dep',d)}>Mark reviewed</button>}{(d.status||'pending')==='reviewed'&&<button style={{marginLeft:8,background:'transparent',border:'1px solid #8a6d1f',color:'#ffd970',borderRadius:99,padding:'3px 10px',fontSize:10,fontWeight:700,cursor:'pointer'}} onClick={()=>retryCommission(d)}>Retry commission</button>}</td>
           <td style={{padding:'11px 14px',color:'#9db5d0'}}>{d.created_at?new Date(d.created_at).toLocaleString():'—'}</td>
         </tr>)}{deps.length===0&&<tr><td colSpan="6" style={{padding:'16px',color:'#9db5d0'}}>No deposit requests.</td></tr>}</tbody>
       </table>
@@ -911,7 +919,7 @@ function App(){
       if(data.user){
         await supabase.from('profiles').upsert({id:data.user.id,email:email.trim(),username:username||email.split('@')[0],display_name:profileName||username||email.split('@')[0]},{onConflict:'id'});
         try{
-          const ref=localStorage.getItem('cm_ref');
+          const rawRef=(new URLSearchParams(window.location.search).get('ref')||localStorage.getItem('cm_ref'));const ref=(rawRef&&/^[A-Za-z0-9]{4,32}$/.test(rawRef))?rawRef:null;
           if(ref){
             const {data:inviter}=await supabase.rpc('resolve_referral_code',{code:ref});
             if(inviter)await supabase.from('profiles').update({referred_by:inviter}).eq('id',data.user.id);
@@ -964,7 +972,7 @@ function App(){
       if(!data.user)throw new Error('Code verification failed.');
       await supabase.from('profiles').upsert({id:data.user.id,email:email.trim(),username:username.trim(),display_name:profileName||username.trim()},{onConflict:'id'});
       try{
-        const ref=localStorage.getItem('cm_ref');
+        const rawRef=(new URLSearchParams(window.location.search).get('ref')||localStorage.getItem('cm_ref'));const ref=(rawRef&&/^[A-Za-z0-9]{4,32}$/.test(rawRef))?rawRef:null;
         if(ref){
           const {data:inviter}=await supabase.rpc('resolve_referral_code',{code:ref});
           if(inviter)await supabase.from('profiles').update({referred_by:inviter}).eq('id',data.user.id);
