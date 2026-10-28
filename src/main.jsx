@@ -480,7 +480,7 @@ function App(){
   const [withdrawPassword,setWithdrawPassword]=useState('');
   const [showPass,setShowPass]=useState(false);
   const [notice,setNotice]=useState('');
-  const [refInput,setRefInput]=useState('');
+  const [refInput,setRefInput]=useState(()=>{try{const r=new URLSearchParams(window.location.search).get('ref')||localStorage.getItem('cm_ref');return (r&&/^[A-Za-z0-9]{4,32}$/.test(r))?r:''}catch{return ''}});
   const [busy,setBusy]=useState(false);
   const [session,setSession]=useState(null);
   const [mobileMenu,setMobileMenu]=useState(false);
