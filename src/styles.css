@@ -344,3 +344,77 @@ table th{color:#fbbf24}
 @keyframes beam-spin{to{--beam-angle:360deg}}
 .btn,.ov-btn,.ov-tile,.ov-rcard{position:relative}
 .btn::after,.ov-btn::after,.ov-tile::after,.ov-rcard::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:2px;background:conic-gradient(from var(--beam-angle),#ff004c,#ff7a00,#ffee00,#00e676,#00b0ff,#7c4dff,#ff00e5,#ff004c);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:beam-spin 3s linear infinite;pointer-events:none}
+
+/* FUTURISTIC EMERALD NEON THEME — user-supplied palette, 28 Oct 2026 */
+:root{--bg-main:#001A14;--bg-secondary:#002B20;--bg-dark:#00110D;--bg-panel:#03271F;--bg-card:#04382B;--primary:#00A86B;--primary-dark:#007A4D;--primary-light:#00D995;--emerald:#10B981;--mint:#34D399;--mint-light:#6EE7B7;--neon-green:#00FFB2;--glow-green:#00FF99;--glow-mint:#34FFD1;--glow-cyan:#00E5FF;--glow-purple:#A855F7;--glow-gold:#FFD166;--glow-blue:#38BDF8;--glow-red:#FF4569;--text-primary:#FFFFFF;--text-secondary:#D1FAE5;--text-muted:#94B8AA;--border-color:#087F5B;--border-glow:#00FFB2;--card-border:#087F5B;--card-hover:#07513C;--cyan:#00E5FF;--blue:#38BDF8;--purple:#A855F7;--muted:#94B8AA;--line:#087F5B;--panel:#03271F}
+body{background:#001A14!important;background-image:radial-gradient(1000px 500px at 80% -10%,rgba(0,107,69,.35),transparent 60%),radial-gradient(800px 400px at 10% 0%,rgba(0,61,45,.45),transparent 60%)!important;color:#fff}
+.dashmain{background:transparent}
+.side{background:#00251C;border-color:#087F5B}
+.side>button{color:#D1FAE5}
+.side>button.selected,.side>button:hover{background:linear-gradient(135deg,#006B45,#00A86B);color:#fff;box-shadow:0 0 20px rgba(0,255,178,.35)}
+.brand b{background:linear-gradient(90deg,#00A86B,#00FFB2);color:transparent;background-clip:text}
+.hero{background:linear-gradient(135deg,#001A14,#003D2D,#006B45);border-bottom:1px solid #087F5B}
+.hero h1 em{background:linear-gradient(90deg,#00A86B,#00FFB2);color:transparent;background-clip:text}
+.metricbar{background:linear-gradient(120deg,#002B20,#006B45);border-color:#087F5B}
+.packages{background:linear-gradient(180deg,#001A14,#003D2D)}
+.steps .step,.plangrid .plan,.publicplans .publicplan,.featurestrip .featurebox,.stats .stat{background:linear-gradient(145deg,#04382B,#001A14);border-color:#087F5B}
+.steps .step:nth-child(4n+2),.plangrid .plan:nth-child(5n+2),.publicplans .publicplan:nth-child(5n+2),.featurestrip .featurebox:nth-child(4n+2),.stats .stat:nth-child(3n+2){background:linear-gradient(145deg,#211044,#001A14);border-color:#A855F7;box-shadow:0 0 18px rgba(168,85,247,.25)}
+.steps .step:nth-child(4n+3),.plangrid .plan:nth-child(5n+3),.publicplans .publicplan:nth-child(5n+3),.featurestrip .featurebox:nth-child(4n+3),.stats .stat:nth-child(3n+3){background:linear-gradient(145deg,#30250A,#001A14);border-color:#FFD166;box-shadow:0 0 18px rgba(255,209,102,.22)}
+.steps .step:nth-child(4n+4),.plangrid .plan:nth-child(5n+4),.publicplans .publicplan:nth-child(5n+4),.featurestrip .featurebox:nth-child(4n+4){background:linear-gradient(145deg,#052F48,#001A14);border-color:#38BDF8;box-shadow:0 0 18px rgba(56,189,248,.22)}
+.plangrid .plan:nth-child(5n+5),.publicplans .publicplan:nth-child(5n+5){background:linear-gradient(145deg,#03271F,#001A14);border-color:#00E5FF;box-shadow:0 0 18px rgba(0,229,255,.22)}
+.authstage{background:linear-gradient(160deg,#001A14,#003D2D,#006B45)}
+.authcard{background:linear-gradient(145deg,#03271F,#001A14);border-color:#087F5B}
+.infoCard{background:linear-gradient(145deg,#03271F,#006B45);border-color:#087F5B}
+.placeholder,.addrbox,.simbox{background:linear-gradient(145deg,#03271F,#001A14);border-color:#087F5B}
+.salary{background:linear-gradient(135deg,#03271F,#006B45);border-color:#087F5B}
+.btn{background:linear-gradient(100deg,#00A86B,#00FFB2);color:#fff;box-shadow:0 0 20px rgba(0,255,178,.35)}
+.btn:hover{filter:brightness(1.08)}
+.btn.outline{border:1px solid #ffffff55;background:transparent;color:#fff;box-shadow:none}
+.inputwrap:focus-within{border-color:#00FFB2;box-shadow:0 0 0 3px rgba(0,255,178,.2)}
+table th{color:#00FFB2}
+.txlist .txrow{background:linear-gradient(135deg,#03271F,#001A14);border-color:#087F5B}
+.txlist .txrow .rwd{color:#00FFB2}
+.plangrid{background:linear-gradient(135deg,#001A14,#003D2D);border:1px solid #087F5B}
+.ov-page{background:linear-gradient(135deg,#001A14,#003D2D,#006B45)}
+.ov-welcome{background:linear-gradient(135deg,#04382B,#001A14);color:#fff;border:1px solid #087F5B;box-shadow:0 0 20px rgba(0,255,178,.25)}
+.ov-welcome small{color:#94B8AA}
+.ov-walletbox{background:linear-gradient(135deg,#006B45,#00A86B);color:#fff;border:1px solid #00FFB2;box-shadow:0 0 24px rgba(0,255,178,.35)}
+.ov-mini-ref{background:linear-gradient(135deg,#04382B,#006B45);border:1px solid #087F5B;color:#fff}
+.ov-mini-sup{background:linear-gradient(135deg,#052F48,#075985);border:1px solid #38BDF8;color:#fff}
+.ov-tile.t-teal,.ov-tile.t-purple,.ov-tile.t-orange,.ov-tile.t-blue,.ov-tile.t-pink,.ov-tile.t-magenta,.ov-tile.t-cyan,.ov-tile.t-dark{background:linear-gradient(135deg,#04382B,#001A14);border:1px solid #087F5B;box-shadow:0 0 12px rgba(0,255,178,.15);color:#fff}
+.ov-tile.t-teal svg{color:#00FFB2}.ov-tile.t-purple svg{color:#C084FC}.ov-tile.t-orange svg{color:#FFD166}.ov-tile.t-blue svg{color:#38BDF8}.ov-tile.t-pink svg{color:#FF4569}.ov-tile.t-magenta svg{color:#A855F7}.ov-tile.t-cyan svg{color:#00E5FF}.ov-tile.t-dark svg{color:#94B8AA}
+.ov-tile:hover{border-color:#00FFB2;box-shadow:0 0 20px rgba(0,255,178,.45)}
+.ov-rcard.r-pink,.ov-rcard.r-teal,.ov-rcard.r-orange,.ov-rcard.r-red,.ov-rcard.r-purple,.ov-rcard.r-green,.ov-rcard.r-dark{background:linear-gradient(135deg,#03271F,#001A14);border:1px solid #087F5B;color:#fff}
+.ov-rcard.r-pink svg{color:#FF4569}.ov-rcard.r-teal svg{color:#00FFB2}.ov-rcard.r-orange svg{color:#FFD166}.ov-rcard.r-red svg{color:#FF4569}.ov-rcard.r-purple svg{color:#C084FC}.ov-rcard.r-green svg{color:#34D399}.ov-rcard.r-dark svg{color:#94B8AA}
+.btn::after,.ov-btn::after,.ov-tile::after,.ov-rcard::after{background:conic-gradient(from var(--beam-angle),transparent 0 70%,#00FFB2 85%,transparent 100%)}
+/* Topbar search + notifications */
+.topbarTools{display:flex;align-items:center;gap:10px;margin-left:auto}
+.topSearch{background:#03271F;border:1px solid #087F5B;color:#fff;border-radius:10px;padding:8px 12px;min-width:110px;outline:none}
+.topSearch::placeholder{color:#94B8AA}
+.notifWrap{position:relative}
+.notifBtn{background:#03271F;border:1px solid #087F5B;color:#00FFB2;border-radius:10px;padding:8px 10px;position:relative;cursor:pointer}
+.notifBadge{position:absolute;top:-6px;right:-6px;background:#FF4569;color:#fff;font-size:10px;font-weight:800;border-radius:99px;padding:1px 5px}
+.notifPanel{position:absolute;right:0;top:44px;width:260px;background:#03271F;border:1px solid #087F5B;border-radius:14px;padding:8px;z-index:50;box-shadow:0 0 20px rgba(0,255,178,.25)}
+.notifRow{display:flex;justify-content:space-between;gap:8px;padding:8px;border-bottom:1px solid rgba(8,127,91,.3);font-size:13px}
+.notifRow small{color:#94B8AA}
+/* Real-data charts */
+.ov-charts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ov-chart{background:linear-gradient(135deg,#04382B,#001A14);border:1px solid #087F5B;border-radius:20px;padding:14px}
+.ov-chart h3{margin:0 0 12px;font-size:15px}
+.ov-bars{display:flex;align-items:flex-end;gap:14px;height:130px}
+.ov-barcol{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.ov-bar{width:100%;max-width:44px;border-radius:8px 8px 0 0;background:linear-gradient(180deg,#00FFB2,#00A86B);box-shadow:0 0 12px rgba(0,255,178,.35)}
+.ov-bar.bar2{background:linear-gradient(180deg,#00E5FF,#075985)}
+.ov-barcol b{font-size:12px}
+.ov-barcol small{font-size:10px;color:#94B8AA;text-align:center}
+/* Tasks + Apps */
+.taskList{display:flex;flex-direction:column;gap:10px}
+.taskRow{display:flex;align-items:center;gap:10px;background:#03271F;border:1px solid #087F5B;border-radius:14px;padding:12px}
+.taskRow b{flex:1}
+.taskDone{color:#00FFB2;font-weight:800}
+.taskTodo{color:#FFD166;font-weight:800}
+.taskGo{background:#00A86B;color:#fff;border:0;border-radius:10px;padding:8px 14px;cursor:pointer}
+.appCard{background:linear-gradient(135deg,#04382B,#001A14);border:1px solid #087F5B;border-radius:20px;padding:20px;text-align:center;box-shadow:0 0 20px rgba(0,255,178,.2)}
+.appIcon{width:96px;height:96px;border-radius:22px;box-shadow:0 0 20px rgba(0,255,178,.4);object-fit:cover}
+.appSteps{color:#D1FAE5;font-size:14px}
+@media(max-width:650px){.ov-charts{grid-template-columns:1fr}.topSearch{min-width:0;flex:1}.dashTopbar{flex-wrap:wrap}}
