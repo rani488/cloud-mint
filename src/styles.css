@@ -418,3 +418,7 @@ table th{color:#00FFB2}
 .appIcon{width:96px;height:96px;border-radius:22px;box-shadow:0 0 20px rgba(0,255,178,.4);object-fit:cover}
 .appSteps{color:#D1FAE5;font-size:14px}
 @media(max-width:650px){.ov-charts{grid-template-columns:1fr}.topSearch{min-width:0;flex:1}.dashTopbar{flex-wrap:wrap}}
+/* Welcome card: red/pink leftovers -> white on emerald (user feedback 28 Oct) */
+.ov-welcome-ic{background:#006B45;color:#fff;box-shadow:0 0 16px rgba(0,255,178,.35)}
+.ov-welcome p{color:#D1FAE5}
+.ov-brand{color:#fff}
