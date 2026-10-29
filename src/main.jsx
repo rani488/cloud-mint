@@ -11,9 +11,10 @@ const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabase
 
 const plans = [
   {name:'PACKAGE 1',price:5,min:5,max:100,rate:'1.67%',tone:'cyan',icon:'◆'},
-  {name:'PACKAGE 2',price:101,min:101,max:500,rate:'1.67%',tone:'purple',icon:'⬢',popular:true},
-  {name:'PACKAGE 3',price:501,min:501,max:1000,rate:'1.67%',tone:'teal',icon:'◈'},
-  {name:'PACKAGE 4',price:1001,min:1001,max:5000,rate:'1.67%',tone:'gold',icon:'✦'}
+  {name:'PACKAGE 2',price:101,min:101,max:250,rate:'1.67%',tone:'purple',icon:'⬢',popular:true},
+  {name:'PACKAGE 3',price:251,min:251,max:500,rate:'1.67%',tone:'teal',icon:'◈'},
+  {name:'PACKAGE 4',price:501,min:501,max:1000,rate:'1.67%',tone:'gold',icon:'✦'},
+  {name:'PACKAGE 5',price:1001,min:1001,max:5000,rate:'1.67%',tone:'cyan',icon:'✧'}
 ];
 const rewardRows = [{members:10,reward:3},{members:20,reward:5},{members:50,reward:10},{members:100,reward:20},{members:500,reward:50}];
 const ICONS={LayoutDashboard,Wallet,Package,Zap,Activity,Gift,Users,ChartNoAxesCombined,UserRound,CircleHelp,Settings,Link,Globe,MessageCircle,Send,Star,Bell,ShieldCheck,Smartphone,ListChecks,Search,Download};
