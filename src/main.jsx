@@ -608,7 +608,7 @@ function App(){
     })();
     return ()=>{cancelled=true};
   },[session]);
-  useEffect(()=>{ if(isAdminPath) setEmail('miamiqueens11@gmail.com'); },[]);
+  useEffect(()=>{ if(isAdminPath) setEmail('cloudmint.site@gmail.com'); },[]);
   useEffect(()=>{ if(!toast)return; const t=setTimeout(()=>setToast(''),3200); return ()=>clearTimeout(t); },[toast]);
   const refreshUserData=async()=>{
     if(!supabase||!session?.user)return;
