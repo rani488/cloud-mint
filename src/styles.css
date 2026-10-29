@@ -422,3 +422,10 @@ table th{color:#00FFB2}
 .ov-welcome-ic{background:#006B45;color:#fff;box-shadow:0 0 16px rgba(0,255,178,.35)}
 .ov-welcome p{color:#D1FAE5}
 .ov-brand{color:#fff}
+
+/* Packages tab amount box only: fixed width inside card, theme-matched */
+.plangrid .plan>div{width:100%}
+.plangrid .plan label{display:block;font-size:11px;color:#d8eaff;margin:4px 0 6px}
+.plangrid .plan input{width:100%;min-width:0;background:#001A14;border:1px solid #087F5B;border-radius:10px;color:#fff;padding:11px 10px;font-size:13px;outline:none}
+.plangrid .plan input:focus{border-color:#00FFB2;box-shadow:0 0 0 3px rgba(0,255,178,.15)}
+.plangrid .plan input::placeholder{color:#5f7d72}
