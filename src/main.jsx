@@ -44,7 +44,7 @@ function AdminPanel({tab,setTab}){
   const [packs,setPacks]=useState([]);
   const [deps,setDeps]=useState([]);
   const [wds,setWds]=useState([]);
-  const [addrs,setAddrs]=useState({deposit_tron:'',deposit_bnb:'',maintenance_mode:'off'});
+  const [addrs,setAddrs]=useState({deposit_tron:'',deposit_bnb:'',maintenance_mode:'off',ppp_visible:'on'});
   const [saving,setSaving]=useState(false);
   const [amsg,setAmsg]=useState('');
   const [rLevels,setRLevels]=useState([]);
@@ -70,7 +70,7 @@ function AdminPanel({tab,setTab}){
         ]);
         if(!cancelled){
           setUsers(u.data||[]); setPacks(p.data||[]); setDeps(d.data||[]); setWds(w.data||[]); setRLevels(rl.data||[]); setRClaims(rc.data||[]);
-          const m={deposit_tron:'',deposit_bnb:'',maintenance_mode:'off'};(s.data||[]).forEach(r=>{m[r.key]=r.value||''});setAddrs(m);
+          const m={deposit_tron:'',deposit_bnb:'',maintenance_mode:'off',ppp_visible:'on'};(s.data||[]).forEach(r=>{m[r.key]=r.value||''});setAddrs(m);
         }
       }catch{ if(!cancelled){ setUsers([]); setPacks([]); } }
       if(!cancelled) setLoading(false);
@@ -188,6 +188,16 @@ function AdminPanel({tab,setTab}){
       setAmsg('Maintenance mode is now '+next.toUpperCase()+'.');
     }catch(err){setAmsg(err.message||'Could not save.')}finally{setSaving(false)}
   }
+  async function togglePpp(){
+    const next=addrs.ppp_visible==='on'?'off':'on';
+    setSaving(true);setAmsg('');
+    try{
+      const {error}=await supabase.from('site_settings').upsert({key:'ppp_visible',value:next},{onConflict:'key'});
+      if(error)throw error;
+      setAddrs({...addrs,ppp_visible:next});
+      setAmsg('Passive Pro Program is now '+(next==='on'?'SHOWN in the user menu.':'HIDDEN from the user menu.'));
+    }catch(err){setAmsg(err.message||'Could not save.')}finally{setSaving(false)}
+  }
   return <div className="dashsection">
     <div className="sectiontitle"><h2>Admin Panel</h2><span>restricted access</span></div>
     {amsg&&<p className="muted" style={{margin:'0 0 12px'}}>{amsg}</p>}
@@ -263,6 +273,13 @@ function AdminPanel({tab,setTab}){
         <small>Website maintenance</small>
         <p className="muted" style={{margin:'10px 0 14px'}}>When ON, the whole public website shows a maintenance page. The admin panel at /admin stays accessible so you can turn it back off.</p>
         <Button kind={addrs.maintenance_mode==='on'?'primary':'outline'} onClick={toggleMaintenance} disabled={saving}>{saving?'Saving…':addrs.maintenance_mode==='on'?'Turn maintenance OFF':'Turn maintenance ON'}</Button>
+        {amsg&&<p className="muted" style={{marginTop:10}}>{amsg}</p>}
+      </div>
+      <div className="sectiontitle" style={{marginTop:22}}><h2>Passive Pro Program</h2><span>{addrs.ppp_visible==='on'?'SHOWN':'HIDDEN'}</span></div>
+      <div className="addrbox">
+        <small>Menu visibility</small>
+        <p className="muted" style={{margin:'10px 0 14px'}}>When OFF, the Passive Pro Program option is hidden from the user menu. The tab content stays Coming Soon either way — this button only controls whether users see the option.</p>
+        <Button kind={addrs.ppp_visible==='on'?'primary':'outline'} onClick={togglePpp} disabled={saving}>{saving?'Saving…':addrs.ppp_visible==='on'?'Hide from menu':'Show in menu'}</Button>
         {amsg&&<p className="muted" style={{marginTop:10}}>{amsg}</p>}
       </div>
     </div></>}
@@ -511,7 +528,7 @@ function App(){
   const [cycles,setCycles]=useState([]);
   const completingRef=useRef({});
   const [withdrawals,setWithdrawals]=useState([]);
-  const [siteAddrs,setSiteAddrs]=useState({TRON:'',BNB:'0x73173d35F5D5d6518EF8d32b65d85Ca7910D2376'});
+  const [siteAddrs,setSiteAddrs]=useState({TRON:'',BNB:'0x73173d35F5D5d6518EF8d32b65d85Ca7910D2376',PPP:'on'});
   const [menuItems,setMenuItems]=useState([]);
   const [maintenance,setMaintenance]=useState(false);
   const [dbPacks,setDbPacks]=useState([]);
@@ -772,7 +789,7 @@ function App(){
         if(pr.data){setProfile(pr.data);setEditName(pr.data.display_name||'')}
         setDeposits(d.data||[]);setWithdrawals(w.data||[]);
         if(mn.data&&mn.data.length)setMenuItems(mn.data);
-        const m={TRON:'',BNB:''};(s.data||[]).forEach(r=>{if(r.key==='deposit_tron')m.TRON=r.value||'';if(r.key==='deposit_bnb')m.BNB=r.value||''});setSiteAddrs(m);
+        const m={TRON:'',BNB:'',PPP:'on'};(s.data||[]).forEach(r=>{if(r.key==='deposit_tron')m.TRON=r.value||'';if(r.key==='deposit_bnb')m.BNB=r.value||'';if(r.key==='ppp_visible')m.PPP=r.value||''});setSiteAddrs(m);
       }catch{/* keep defaults */}
     })();
     return ()=>{cancelled=true};
@@ -1106,7 +1123,7 @@ function App(){
       setActiveTab(m.tab_key);onNavigate('dashboard');
     };
     return <aside className={'side'+(open?' open':'')}><Brand/><button className="drawerClose" onClick={onClose} aria-label="Close menu"><X/></button>
-      <button className={activeTab==='Passive Pro Program'&&page==='dashboard'?'selected':''} onClick={()=>{setActiveTab('Passive Pro Program');onNavigate('dashboard')}}><Zap/>Passive Pro Program</button>{menu.map(m=>{const I=ICONS[m.icon]||CircleHelp;return <button className={activeTab===m.tab_key&&page==='dashboard'?'selected':''} onClick={()=>go(m)} key={m.id||m.tab_key}><I/>{m.label}</button>})}<button className={activeTab==='Tasks'&&page==='dashboard'?'selected':''} onClick={()=>{setActiveTab('Tasks');onNavigate('dashboard')}}><ListChecks/>Tasks</button><button className={activeTab==='Apps'&&page==='dashboard'?'selected':''} onClick={()=>{setActiveTab('Apps');onNavigate('dashboard')}}><Smartphone/>Apps</button>
+      {siteAddrs.PPP!=='off'&&<button className={activeTab==='Passive Pro Program'&&page==='dashboard'?'selected':''} onClick={()=>{setActiveTab('Passive Pro Program');onNavigate('dashboard')}}><Zap/>Passive Pro Program</button>}{menu.map(m=>{const I=ICONS[m.icon]||CircleHelp;return <button className={activeTab===m.tab_key&&page==='dashboard'?'selected':''} onClick={()=>go(m)} key={m.id||m.tab_key}><I/>{m.label}</button>})}<button className={activeTab==='Tasks'&&page==='dashboard'?'selected':''} onClick={()=>{setActiveTab('Tasks');onNavigate('dashboard')}}><ListChecks/>Tasks</button><button className={activeTab==='Apps'&&page==='dashboard'?'selected':''} onClick={()=>{setActiveTab('Apps');onNavigate('dashboard')}}><Smartphone/>Apps</button>
       <div className="salary"><CalendarDays/>Monthly Salary<small>Coming Soon</small></div>
       <button onClick={signOut}><LogOut/>Log out</button>
     </aside>;
